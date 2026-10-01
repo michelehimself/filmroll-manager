@@ -631,7 +631,7 @@ function viewSidebar() {
       <span class="tool-text"><div class="tool-title">${t.title}</div><div class="tool-desc">${t.desc}</div></span>
       ${t.soon ? `<span class="tool-badge">Soon</span>` : ""}
     </button>`).join("");
-  return `<aside class="sidebar"><div class="sidebar-head">Tools</div>${tiles}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p></aside>`;
+  return `<aside class="sidebar"><div class="sidebar-head">Tools</div>${tiles}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p>${S.folder ? `<p class="sidebar-hint"><span class="keycap">Space</span> Press to enlarge the selected picture</p>` : ""}</aside>`;
 }
 
 function viewDropArea() {
