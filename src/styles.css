@@ -1,3 +1,12 @@
+/* ── Fonts: shipped with the app (src/fonts), nothing is loaded from the internet ── */
+@font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/ibm-plex-sans-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 700; font-display: swap; src: url("fonts/ibm-plex-sans-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2"); }
+
 /* ── Tokens: light ─────────────────────────────── */
 :root {
   --bg:            #FAFAF8;
@@ -24,6 +33,8 @@
   --orange-bg:#FFF0E8; --orange-fg:#C05020; --orange-bd:#F0C4A8;
 
   --sidebar-w:     232px;
+  --font-ui:   "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;   /* file names */
   /* A printed page is always white, in dark mode too */
   --paper:#FFFFFF; --paper-ink:#1C1C1E; --paper-ink-2:#59595D; --paper-cell:#EDEDED; --paper-rule:#CCCCCC;
 
@@ -60,7 +71,7 @@
 
 html, body { height: 100%; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font-ui);
   background: var(--bg);
   color: var(--text);
   display: flex; flex-direction: column;
@@ -180,7 +191,7 @@ button { font-family: inherit; }
 .check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
 .scope { font-size: 12px; font-weight: 500; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; }
 .cell { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; -webkit-user-select: text; }
-.cell.name { font-weight: 500; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+.cell.name { font-weight: 500; font-family: var(--font-mono); font-size: 12px; }
 .cell.date { color: var(--text-2); font-variant-numeric: tabular-nums; }
 
 .cell.editable { overflow: visible; }
@@ -202,7 +213,7 @@ button { font-family: inherit; }
 .sidebar-hint { margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 12px 4px 0; font-size: 11px; line-height: 1.4; color: var(--text-3); }
 .keycap {
   flex-shrink: 0; padding: 2px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
-  font: 600 11px/1.3 ui-monospace, "SF Mono", Menlo, monospace; color: var(--text-2);
+  font: 600 11px/1.3 var(--font-ui); color: var(--text-2);
 }
 .sidebar-note { font-size: 11px; color: var(--text-3); line-height: 1.45; padding: 4px; }
 
@@ -363,12 +374,12 @@ button { font-family: inherit; }
 .ql-action-label:first-child { text-align: right; }
 .ql-key {
   width: 34px; height: 34px; border-radius: 6px; cursor: pointer; color: #fff;
-  font: 600 14px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  font: 600 14px/1 var(--font-ui);
   background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.35);
 }
 .ql-key:hover { background: rgba(255,255,255,.24); }
 .ql-key:active { transform: translateY(1px); }
-.ql-name { font-size: 13px; font-weight: 600; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.ql-name { font-size: 13px; font-weight: 600; font-family: var(--font-mono); }
 .ql-count { margin-left: 12px; font-weight: 400; font-family: inherit; opacity: .6; font-variant-numeric: tabular-nums; }
 .ql-meta { font-size: 12px; opacity: .7; margin-top: 4px; }
 
@@ -444,7 +455,7 @@ button { font-family: inherit; }
 .rev-list { background: var(--bg-subtle); border-radius: 8px; padding: 8px 12px; max-height: 320px; overflow-y: auto; }
 .rev-row  { display: grid; grid-template-columns: 74px 1fr 16px 1fr; gap: 6px; align-items: center; font-size: 12px; padding: 3px 0; }
 .rev-num  { font-weight: 600; font-variant-numeric: tabular-nums; }
-.rev-old, .rev-new { font-family: ui-monospace, "SF Mono", Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rev-old, .rev-new { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rev-old { color: var(--text-3); }
 .rev-arr { color: var(--text-3); text-align: center; }
 
@@ -503,7 +514,7 @@ button.tag { cursor: pointer; transition: opacity .12s; }
 button.tag:hover { opacity: .75; }
 .sep-btn {
   padding: 1px 10px; line-height: 22px; border-radius: 6px; cursor: pointer;
-  font-size: 13px; font-weight: 600; font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 13px; font-weight: 600; font-family: var(--font-mono);
   border: 1px solid var(--border); background: var(--bg-subtle); color: var(--text);
 }
 .sep-btn:hover { background: var(--border-soft); }
@@ -511,7 +522,7 @@ button.tag:hover { opacity: .75; }
 .preview-wrap { background: var(--bg-subtle); border-radius: 9px; padding: 12px 14px; margin-top: 16px; }
 .preview-head { font-size: 11px; font-weight: 600; color: var(--text-3); margin-bottom: 8px; }
 .preview-row  { display: grid; grid-template-columns: 1fr 16px 1.3fr; gap: 6px; align-items: center; font-size: 12px; padding: 2px 0; }
-.prev-old, .prev-new { font-family: ui-monospace, "SF Mono", Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prev-old, .prev-new { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prev-old { color: var(--text-3); }
 .prev-arr { color: var(--text-3); text-align: center; }
 .prev-new { font-weight: 500; }
