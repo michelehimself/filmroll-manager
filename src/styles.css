@@ -153,8 +153,8 @@ button { font-family: inherit; }
 .filelist { flex: 1; min-height: 0; overflow: auto; }
 .row {
   display: grid; align-items: center; column-gap: 14px;
-  grid-template-columns: 56px minmax(170px, 1.5fr) minmax(110px, 1fr) minmax(110px, 1fr) minmax(110px, 1fr) 150px;
-  min-width: 820px; padding: 6px 20px;
+  grid-template-columns: 24px 56px minmax(170px, 1.5fr) minmax(110px, 1fr) minmax(110px, 1fr) minmax(110px, 1fr) 150px;
+  min-width: 860px; padding: 6px 20px;
 }
 .row.head {
   position: sticky; top: 0; z-index: 1;
@@ -163,6 +163,11 @@ button { font-family: inherit; }
 }
 .row.file { border-bottom: 1px solid var(--border-soft); height: 56px; }
 .row.file:hover { background: var(--bg-subtle); }
+.row.file.selected { background: var(--accent-soft); }
+.row.file { cursor: default; }
+.check { display: flex; align-items: center; justify-content: center; }
+.check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+.scope { font-size: 12px; font-weight: 500; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; }
 .cell { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; -webkit-user-select: text; }
 .cell.name { font-weight: 500; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
 .cell.date { color: var(--text-2); font-variant-numeric: tabular-nums; }

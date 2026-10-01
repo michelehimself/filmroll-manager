@@ -57,6 +57,23 @@ pub(crate) fn collect_images(folder: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(files)
 }
 
+/// The files a tool should work on: all images of the folder, or only the chosen
+/// ones (matched by name against the folder's real files, always in natural order).
+pub(crate) fn select_images(folder: &Path, only: Option<&[String]>) -> Result<Vec<PathBuf>, String> {
+    let all = collect_images(folder)?;
+    let Some(names) = only else { return Ok(all) };
+
+    let wanted: HashSet<&str> = names.iter().map(String::as_str).collect();
+    let chosen: Vec<PathBuf> = all.into_iter().filter(|p| wanted.contains(file_name(p).as_str())).collect();
+    if chosen.len() != wanted.len() {
+        return Err("Some of the selected files are no longer in the folder. Please reload the folder.".to_string());
+    }
+    if chosen.is_empty() {
+        return Err("No files selected.".to_string());
+    }
+    Ok(chosen)
+}
+
 fn emit_progress(app: &AppHandle, value: f64) {
     let _ = app.emit("progress", value);
 }
@@ -151,17 +168,17 @@ pub fn list_images(folder: String) -> Result<Vec<String>, String> {
 
 /// Step 2 – the first file gets the name of the last one, and so on.
 #[tauri::command]
-pub async fn reverse_order(app: AppHandle, folder: String) -> Result<(), String> {
+pub async fn reverse_order(app: AppHandle, folder: String, files: Option<Vec<String>>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        reverse_in(Path::new(&folder), &|v| emit_progress(&app, v))
+        reverse_in(Path::new(&folder), files.as_deref(), &|v| emit_progress(&app, v))
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
-fn reverse_in(folder: &Path, progress: &dyn Fn(f64)) -> Result<(), String> {
+fn reverse_in(folder: &Path, only: Option<&[String]>, progress: &dyn Fn(f64)) -> Result<(), String> {
     {
-        let files = collect_images(folder)?;
+        let files = select_images(folder, only)?;
         let count = files.len();
 
         let targets: Vec<PathBuf> = (0..count)
@@ -191,17 +208,23 @@ pub async fn write_metadata(
     app: AppHandle,
     folder: String,
     meta: MetadataInput,
+    files: Option<Vec<String>>,
 ) -> Result<usize, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        write_metadata_in(Path::new(&folder), &meta, &|v| emit_progress(&app, v))
+        write_metadata_in(Path::new(&folder), files.as_deref(), &meta, &|v| emit_progress(&app, v))
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
-pub(crate) fn write_metadata_in(folder: &Path, meta: &MetadataInput, progress: &dyn Fn(f64)) -> Result<usize, String> {
+pub(crate) fn write_metadata_in(
+    folder: &Path,
+    only: Option<&[String]>,
+    meta: &MetadataInput,
+    progress: &dyn Fn(f64),
+) -> Result<usize, String> {
     {
-        let files = collect_images(folder)?;
+        let files = select_images(folder, only)?;
         let start = NaiveDateTime::parse_from_str(
             &format!("{} {}", meta.date, meta.time),
             "%Y-%m-%d %H:%M",
@@ -432,9 +455,10 @@ pub async fn rename_files(
     parts: Vec<TemplatePart>,
     date: String,
     film: String,
+    files: Option<Vec<String>>,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        rename_in(Path::new(&folder), &parts, &date, &film, &|v| emit_progress(&app, v))
+        rename_in(Path::new(&folder), files.as_deref(), &parts, &date, &film, &|v| emit_progress(&app, v))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -442,13 +466,14 @@ pub async fn rename_files(
 
 fn rename_in(
     folder: &Path,
+    only: Option<&[String]>,
     parts: &[TemplatePart],
     date: &str,
     film: &str,
     progress: &dyn Fn(f64),
 ) -> Result<(), String> {
     {
-        let files = collect_images(folder)?;
+        let files = select_images(folder, only)?;
         let slug = film_slug(film);
 
         let mut targets = Vec::with_capacity(files.len());
@@ -529,7 +554,7 @@ mod tests {
     #[test]
     fn reverse_swaps_frames() {
         let dir = roll("reverse", 5);
-        reverse_in(&dir, &|_| {}).unwrap();
+        reverse_in(&dir, None, &|_| {}).unwrap();
         assert_eq!(names(&dir), vec!["scan_1.jpg", "scan_2.jpg", "scan_3.jpg", "scan_4.jpg", "scan_5.jpg"]);
         assert_eq!(frame_id(&dir.join("scan_1.jpg")), "frame005");
         assert_eq!(frame_id(&dir.join("scan_5.jpg")), "frame001");
@@ -543,7 +568,7 @@ mod tests {
             camera: "Canon AE-1".into(), lens: "50mm f/1.4".into(), film: "Kodak Gold 200".into(),
             date: "2026-05-01".into(), time: "21:00".into(),
         };
-        assert_eq!(write_metadata_in(&dir, &meta, &|_| {}).unwrap(), 3);
+        assert_eq!(write_metadata_in(&dir, None, &meta, &|_| {}).unwrap(), 3);
 
         let third = dir.join("scan_3.jpg");
         let exif = Metadata::new_from_path(&third).unwrap();
@@ -558,7 +583,7 @@ mod tests {
         assert_eq!(frame_id(&third), "frame003"); // still the same image
 
         // Running it twice must not stack a second XMP packet
-        write_metadata_in(&dir, &meta, &|_| {}).unwrap();
+        write_metadata_in(&dir, None, &meta, &|_| {}).unwrap();
         let bytes = fs::read(&third).unwrap();
         assert_eq!(String::from_utf8_lossy(&bytes).matches("xmp:Label").count(), 1);
     }
@@ -570,7 +595,7 @@ mod tests {
             camera: "Nikon FM3A".into(), lens: "Nikkor 50mm f/1.4".into(), film: "Portra 400".into(),
             date: "2026-05-01".into(), time: "21:00".into(),
         };
-        write_metadata_in(&dir, &meta, &|_| {}).unwrap();
+        write_metadata_in(&dir, None, &meta, &|_| {}).unwrap();
         let exif = Metadata::new_from_path(&dir.join("scan_1.jpg")).unwrap();
         assert!(exif.get_tag(&ExifTag::ExifVersion(vec![])).next().is_some());
         assert_eq!(exif.get_tag(&ExifTag::ISO(vec![])).next().unwrap(), &ExifTag::ISO(vec![400]));
@@ -617,7 +642,7 @@ mod tests {
             TemplatePart { kind: "text".into(), value: Some("_".into()) },
             TemplatePart { kind: "film".into(), value: None },
         ];
-        rename_in(&dir, &parts, "2026-09-27", "Kodak Gold 200", &|_| {}).unwrap();
+        rename_in(&dir, None, &parts, "2026-09-27", "Kodak Gold 200", &|_| {}).unwrap();
         assert_eq!(names(&dir), vec![
             "2026-09-27_IMG-01_Kodak-Gold-200.jpg",
             "2026-09-27_IMG-02_Kodak-Gold-200.jpg",
@@ -630,9 +655,75 @@ mod tests {
     fn rename_refuses_duplicate_names() {
         let dir = roll("dupes", 3);
         let parts = vec![TemplatePart { kind: "film".into(), value: None }];
-        let err = rename_in(&dir, &parts, "2026-09-27", "Portra 400", &|_| {}).unwrap_err();
+        let err = rename_in(&dir, None, &parts, "2026-09-27", "Portra 400", &|_| {}).unwrap_err();
         assert!(err.contains("same") || err.contains("both"));
         assert_eq!(names(&dir).len(), 3); // nothing was touched
         assert!(dir.join("scan_1.jpg").exists());
+    }
+
+    fn strings(names: &[&str]) -> Vec<String> {
+        names.iter().map(|n| n.to_string()).collect()
+    }
+
+    #[test]
+    fn reverse_only_selected_files() {
+        let dir = roll("reverse_sel", 6);
+        let only = strings(&["scan_2.jpg", "scan_3.jpg", "scan_5.jpg"]);
+        reverse_in(&dir, Some(&only), &|_| {}).unwrap();
+        // 2 ↔ 5, 3 stays in the middle; 1, 4 and 6 are untouched
+        assert_eq!(frame_id(&dir.join("scan_2.jpg")), "frame005");
+        assert_eq!(frame_id(&dir.join("scan_3.jpg")), "frame003");
+        assert_eq!(frame_id(&dir.join("scan_5.jpg")), "frame002");
+        assert_eq!(frame_id(&dir.join("scan_1.jpg")), "frame001");
+        assert_eq!(frame_id(&dir.join("scan_4.jpg")), "frame004");
+        assert_eq!(frame_id(&dir.join("scan_6.jpg")), "frame006");
+    }
+
+    #[test]
+    fn metadata_only_for_selected_files() {
+        let dir = roll("meta_sel", 4);
+        let meta = MetadataInput {
+            camera: "Canon AE-1".into(), lens: "".into(), film: "".into(),
+            date: "2026-05-01".into(), time: "21:00".into(),
+        };
+        let only = strings(&["scan_2.jpg", "scan_4.jpg"]);
+        assert_eq!(write_metadata_in(&dir, Some(&only), &meta, &|_| {}).unwrap(), 2);
+
+        let model = |n: &str| Metadata::new_from_path(&dir.join(n)).ok()
+            .and_then(|m| m.get_tag(&ExifTag::Model(String::new())).next().cloned());
+        assert_eq!(model("scan_2.jpg"), Some(ExifTag::Model("Canon AE-1".into())));
+        assert_eq!(model("scan_1.jpg"), None);
+        // the second selected file is the second frame → +3 s
+        let date = Metadata::new_from_path(&dir.join("scan_4.jpg")).unwrap()
+            .get_tag(&ExifTag::DateTimeOriginal(String::new())).next().cloned();
+        assert_eq!(date, Some(ExifTag::DateTimeOriginal("2026:05:01 21:00:03".into())));
+    }
+
+    #[test]
+    fn rename_only_selected_and_protect_others() {
+        let dir = roll("rename_sel", 4);
+        let parts = vec![
+            TemplatePart { kind: "text".into(), value: Some("pick_".into()) },
+            TemplatePart { kind: "num".into(), value: None },
+        ];
+        let only = strings(&["scan_2.jpg", "scan_3.jpg"]);
+        rename_in(&dir, Some(&only), &parts, "", "", &|_| {}).unwrap();
+        assert_eq!(names(&dir), vec!["pick_01.jpg", "pick_02.jpg", "scan_1.jpg", "scan_4.jpg"]);
+
+        // A target that belongs to a file outside the selection must never be overwritten
+        let dir = roll("rename_protect", 3);
+        let only = strings(&["scan_3.jpg"]);
+        let parts = vec![TemplatePart { kind: "text".into(), value: Some("scan_1".into()) }];
+        let err = rename_in(&dir, Some(&only), &parts, "", "", &|_| {}).unwrap_err();
+        assert!(err.contains("already exists"));
+        assert_eq!(names(&dir).len(), 3);
+    }
+
+    #[test]
+    fn selection_must_exist() {
+        let dir = roll("sel_missing", 2);
+        let only = strings(&["nope.jpg"]);
+        assert!(select_images(&dir, Some(&only)).is_err());
+        assert!(select_images(&dir, Some(&[])).is_err());
     }
 }

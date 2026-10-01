@@ -177,7 +177,7 @@ mod tests {
             camera: "Canon AE-1".into(), lens: "50mm f/1.4".into(), film: "Kodak Gold 200 & Co".into(),
             date: "2026-05-01".into(), time: "21:00".into(),
         };
-        write_metadata_in(&dir, &meta, &|_| {}).unwrap();
+        write_metadata_in(&dir, None, &meta, &|_| {}).unwrap();
         let second = read_info(&dir.join("scan_2.jpg"));
         assert_eq!(second.camera, "Canon AE-1");
         assert_eq!(second.lens, "50mm f/1.4");

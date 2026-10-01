@@ -82,6 +82,8 @@ let S = {
   template: [],                      // [{ kind, value? }]
   store: { favorites: [], cameras: [], lenses: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
+  selected: new Set(),   // file names chosen in the list; empty = tools work on all files
+  anchor: null,          // last clicked file name (for shift-click ranges)
   filmQuery: "",
   filmFavoritesOnly: false,
 };
@@ -111,6 +113,14 @@ function nameFor(index) {
   }).join("").trim();
 }
 
+// The files a tool works on: the selection, or everything if nothing is selected
+const scopeFiles = () => (S.selected.size ? S.files.filter((f) => S.selected.has(f.name)) : S.files);
+const scopeNames = () => (S.selected.size ? scopeFiles().map((f) => f.name) : null);
+const scopeText = () => {
+  const n = scopeFiles().length;
+  return S.selected.size ? `Applies to the ${n} selected file${n === 1 ? "" : "s"}.` : `Applies to all ${n} files in the folder.`;
+};
+
 async function loadFolder(path) {
   S.loading = true; S.error = null;
   render();
@@ -119,6 +129,8 @@ async function loadFolder(path) {
     if (files.length) {
       S.files = files;
       S.folder = path;
+      S.selected = new Set();
+      S.anchor = null;
     } else {
       S.error = "This folder contains no JPG, PNG or TIFF images.";
     }
@@ -138,6 +150,8 @@ async function pickFolder() {
 // Re-reads the folder after a tool changed the files (no loading screen)
 async function refreshFolder() {
   S.files = await invoke("read_folder", { folder: S.folder });
+  const names = new Set(S.files.map((f) => f.name));
+  S.selected = new Set([...S.selected].filter((n) => names.has(n)));
   resetThumbnails();
   render();
 }
@@ -149,6 +163,52 @@ function showNotice(text) {
   box.innerHTML = `<div class="success-banner" role="status">${esc(text)}</div>`;
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => { const b = $("notice"); if (b) b.innerHTML = ""; }, 5000);
+}
+
+// ── Selecting files in the list ───────────────────────────────────────────────
+const selectionText = () => {
+  const n = S.files.length;
+  return S.selected.size ? `${S.selected.size} of ${n} selected` : `${n} image${n === 1 ? "" : "s"}`;
+};
+
+// Updates highlight, checkboxes and counters without rebuilding the list
+function updateSelectionUI() {
+  document.querySelectorAll(".row.file").forEach((row) => {
+    const on = S.selected.has(row.dataset.row);
+    row.classList.toggle("selected", on);
+    const box = row.querySelector("[data-check]");
+    if (box) box.checked = on;
+  });
+  const all = $("check-all");
+  if (all) {
+    all.checked = S.files.length > 0 && S.selected.size === S.files.length;
+    all.indeterminate = S.selected.size > 0 && S.selected.size < S.files.length;
+  }
+  const count = $("sel-count");
+  if (count) count.textContent = selectionText();
+}
+
+function selectRow(name, event) {
+  const names = S.files.map((f) => f.name);
+  if (event.shiftKey && S.anchor && names.includes(S.anchor)) {
+    const [a, b] = [names.indexOf(S.anchor), names.indexOf(name)].sort((x, y) => x - y);
+    S.selected = new Set(names.slice(a, b + 1));
+  } else if (event.metaKey || event.ctrlKey) {
+    S.selected = new Set(S.selected);
+    S.selected.has(name) ? S.selected.delete(name) : S.selected.add(name);
+    S.anchor = name;
+  } else {
+    S.selected = new Set([name]);
+    S.anchor = name;
+  }
+  updateSelectionUI();
+}
+
+function toggleCheck(name, on) {
+  S.selected = new Set(S.selected);
+  on ? S.selected.add(name) : S.selected.delete(name);
+  S.anchor = name;
+  updateSelectionUI();
 }
 
 // ── Thumbnails: loaded lazily, three at a time ────────────────────────────────
@@ -215,6 +275,7 @@ function render() {
     const list = document.querySelector(".filelist");
     if (list) list.scrollTop = scroll;
     observeThumbnails();
+    updateSelectionUI();
   }
   renderModal();
 }
@@ -262,7 +323,8 @@ function viewExplorer() {
   const error = S.error ? `<div class="error-banner" role="alert">${esc(S.error)}</div>` : "";
   const n = S.files.length;
   const rows = S.files.map((f) => `
-    <div class="row file">
+    <div class="row file${S.selected.has(f.name) ? " selected" : ""}" data-row="${esc(f.name)}">
+      <div class="check"><input type="checkbox" data-check="${esc(f.name)}" ${S.selected.has(f.name) ? "checked" : ""} aria-label="Select ${esc(f.name)}"></div>
       <div class="thumb">${IC.image}<img data-path="${esc(f.path)}" alt=""></div>
       <div class="cell name" title="${esc(f.name)}">${esc(f.name)}</div>
       <div class="cell" title="${esc(f.camera)}">${esc(f.camera)}</div>
@@ -273,14 +335,14 @@ function viewExplorer() {
   return `
     <section class="explorer" id="dropzone">
       <div class="toolbar">
-        <div class="toolbar-folder">${IC.folder}<span class="name" title="${esc(S.folder)}">${esc(folderName(S.folder))}</span><span class="count">${n} image${n === 1 ? "" : "s"}</span></div>
+        <div class="toolbar-folder">${IC.folder}<span class="name" title="${esc(S.folder)}">${esc(folderName(S.folder))}</span><span class="count" id="sel-count">${selectionText()}</span></div>
         <div class="toolbar-spacer"></div>
         <button class="btn btn-ghost" data-action="pick-folder">Change Folder…</button>
       </div>
       ${error}
       <div id="notice"></div>
       <div class="filelist">
-        <div class="row head"><div></div><div>File</div><div>Camera</div><div>Lens</div><div>Film</div><div>Date</div></div>
+        <div class="row head"><div class="check"><input type="checkbox" id="check-all" data-check-all aria-label="Select all files"></div><div></div><div>File</div><div>Camera</div><div>Lens</div><div>Film</div><div>Date</div></div>
         ${rows}
       </div>
     </section>`;
@@ -518,7 +580,7 @@ function openTool(id) {
   if (S.busy) return;
   S.error = null;
   if (id === "rename") {
-    const first = S.files[0] || {};
+    const first = scopeFiles()[0] || {};
     S.rename.date = (first.date || "").slice(0, 10) || S.meta.date;
     S.rename.film = first.film || S.meta.film;
   }
@@ -562,15 +624,16 @@ function renderModal() {
 
 // Reverse Order – simple preview: frame numbers and file names
 function bodyReverse() {
-  const n = S.files.length;
+  const files = scopeFiles();
+  const n = files.length;
   const width = Math.max(2, String(n).length);
   const pad = (i) => String(i).padStart(width, "0");
-  const rows = S.files.map((f, i) => {
-    const donor = S.files[n - 1 - i];
+  const rows = files.map((f, i) => {
+    const donor = files[n - 1 - i];
     const next = `${stem(donor.name)}.${ext(f.name)}`;
     return `<div class="rev-row"><span class="rev-num">${pad(i + 1)} → ${pad(n - i)}</span><span class="rev-old" title="${esc(f.name)}">${esc(f.name)}</span><span class="rev-arr">→</span><span class="rev-new" title="${esc(next)}">${esc(next)}</span></div>`;
   }).join("");
-  return `<div class="rev-list">${rows}</div>`;
+  return `<div class="scope">${scopeText()}</div><div class="rev-list">${rows}</div>`;
 }
 
 // Bulk Edit Meta Data
@@ -584,6 +647,7 @@ function bodyMeta() {
       </div>
     </div>`;
   return `
+    <div class="scope">${scopeText()}</div>
     <div class="fields">
       ${field("camera", "Camera", IC.camera, "text", "e.g. Canon AE-1, Contax T2")}
       ${field("lens", "Lens", IC.aperture, "text", "e.g. 50mm f/1.4, 35mm f/2.8")}
@@ -612,6 +676,7 @@ function bodyRename() {
       </div>
     </div>`;
   return `
+    <div class="scope">${scopeText()}</div>
     <label class="field-label">Filename Template</label>
     <div class="tpl-editor" id="tpl-editor" contenteditable="true" spellcheck="false" style="margin-top:4px"></div>
     <div class="insert-row">
@@ -708,11 +773,12 @@ function renderPreview() {
     box.innerHTML = `<div class="preview-empty">Add tags above to see how your files will be named.</div>`;
     return;
   }
-  const rows = S.files.slice(0, 6).map((f, i) => {
+  const files = scopeFiles();
+  const rows = files.slice(0, 6).map((f, i) => {
     const next = `${nameFor(i)}.${ext(f.name)}`;
     return `<div class="preview-row"><span class="prev-old" title="${esc(f.name)}">${esc(f.name)}</span><span class="prev-arr">→</span><span class="prev-new" title="${esc(next)}">${esc(next)}</span></div>`;
   }).join("");
-  const more = S.files.length > 6 ? `<div class="preview-more">and ${S.files.length - 6} more</div>` : "";
+  const more = files.length > 6 ? `<div class="preview-more">and ${files.length - 6} more</div>` : "";
   box.innerHTML = rows + more;
 }
 
@@ -720,11 +786,12 @@ function renderPreview() {
 async function confirmModal() {
   if (S.busy || !S.modal) return;
   const tool = S.modal;
-  const count = S.files.length;
+  const count = scopeFiles().length;
+  const files = scopeNames();
   const jobs = {
-    reverse: [() => invoke("reverse_order", { folder: S.folder }), "Frame order reversed."],
-    meta:    [() => invoke("write_metadata", { folder: S.folder, meta: { ...S.meta } }), `Metadata written to ${count} file${count === 1 ? "" : "s"}.`],
-    rename:  [() => invoke("rename_files", { folder: S.folder, parts: S.template, date: S.rename.date, film: S.rename.film }), `${count} file${count === 1 ? "" : "s"} renamed.`],
+    reverse: [() => invoke("reverse_order", { folder: S.folder, files }), "Frame order reversed."],
+    meta:    [() => invoke("write_metadata", { folder: S.folder, meta: { ...S.meta }, files }), `Metadata written to ${count} file${count === 1 ? "" : "s"}.`],
+    rename:  [() => invoke("rename_files", { folder: S.folder, parts: S.template, date: S.rename.date, film: S.rename.film, files }), `${count} file${count === 1 ? "" : "s"} renamed.`],
   };
   const [task, doneText] = jobs[tool];
 
@@ -751,6 +818,7 @@ async function confirmModal() {
 
   if (ok) {
     S.modal = null;
+    if (tool === "rename") { S.selected = new Set(); S.anchor = null; }   // names changed
     try { await refreshFolder(); } catch (e) { S.error = String(e); render(); }
     showNotice(doneText);
   } else {
@@ -774,6 +842,9 @@ getCurrentWebview().onDragDropEvent((event) => {
 
 // ── Event wiring (one delegated listener for everything) ──────────────────────
 document.addEventListener("click", (e) => {
+  // File list: click a row to select, Cmd/Ctrl-click to add, Shift-click for a range
+  const row = e.target.closest(".row.file");
+  if (row && !e.target.closest("input, button")) { selectRow(row.dataset.row, e); return; }
   const t = e.target.closest("[data-action],[data-tab],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
   if (!t || t.disabled) return;
   if (t.dataset.tab && t.dataset.tab !== S.tab) { S.tab = t.dataset.tab; render(); }
@@ -789,6 +860,14 @@ document.addEventListener("click", (e) => {
   if (t.dataset.insert) insertAtCursor(makeChip(t.dataset.insert));
   if (t.dataset.sep) { $("tpl-editor").focus(); document.execCommand("insertText", false, t.dataset.sep); syncTemplate(); }
   if (t.hasAttribute("data-remove")) { t.closest(".tag").remove(); syncTemplate(); }
+});
+
+document.addEventListener("change", (e) => {
+  if (e.target.dataset?.check) toggleCheck(e.target.dataset.check, e.target.checked);
+  if (e.target.hasAttribute?.("data-check-all")) {
+    S.selected = e.target.checked ? new Set(S.files.map((f) => f.name)) : new Set();
+    updateSelectionUI();
+  }
 });
 
 // Text fields write straight into the state (data-model="group.key")
