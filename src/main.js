@@ -27,6 +27,8 @@ const IC = {
   rotateCw:  svg(16, 1.6, `<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>`),
   rotateCcw: svg(16, 1.6, `<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>`),
   close:     svg(14, 1.8, `<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>`),
+  chevronL:  svg(22, 1.8, `<polyline points="15 18 9 12 15 6"/>`),
+  chevronR:  svg(22, 1.8, `<polyline points="9 18 15 12 9 6"/>`),
   plus:      svg(15, 1.8, `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`),
   pencil:    svg(15, 1.6, `<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>`),
   trash:     svg(15, 1.6, `<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>`),
@@ -89,6 +91,7 @@ let S = {
   template: [],                      // [{ kind, value? }]
   store: { favorites: [], cameras: [], lenses: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
+  preview: null,         // file name shown in the quick look (Space bar), or null
   edits: {},             // unsaved changes typed into the list: file name → { camera?, lens?, film?, date? }
   selected: new Set(),   // file names chosen in the list; empty = tools work on all files
   anchor: null,          // last clicked file name (for shift-click ranges)
@@ -295,6 +298,7 @@ async function rotateSelected(clockwise) {
     await invoke("rotate_images", { folder: S.folder, files: chosen.map((f) => f.name), clockwise });
     // Only the turned pictures need new previews
     chosen.forEach((f) => { const url = thumbUrls.get(f.path); if (url) { URL.revokeObjectURL(url); thumbUrls.delete(f.path); } });
+    clearPreviews(chosen.map((f) => f.path));
     S.busy = false;
     await refreshFolder({ keepThumbnails: true });
     showNotice(`${chosen.length} file${chosen.length === 1 ? "" : "s"} rotated ${clockwise ? "clockwise" : "counterclockwise"}.`);
@@ -328,6 +332,124 @@ function toggleCheck(name, on) {
   updateSelectionUI();
 }
 
+// ── Quick look: Space bar shows the selected picture large, like in the Finder ──
+const previewUrls = new Map();       // path → object URL of the large picture (the last few)
+const previewLoading = new Map();    // path → promise while it loads
+const PREVIEW_CACHE = 8;
+
+function clearPreviews(paths) {
+  const list = paths || [...previewUrls.keys()];
+  list.forEach((path) => {
+    const url = previewUrls.get(path);
+    if (url) URL.revokeObjectURL(url);
+    previewUrls.delete(path);
+    previewLoading.delete(path);
+  });
+}
+
+function loadPreview(path) {
+  if (previewUrls.has(path)) return Promise.resolve(previewUrls.get(path));
+  if (previewLoading.has(path)) return previewLoading.get(path);
+  const promise = invoke("get_preview", { path })
+    .then((bytes) => {
+      const url = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
+      previewUrls.set(path, url);
+      while (previewUrls.size > PREVIEW_CACHE) {
+        const [oldPath, oldUrl] = previewUrls.entries().next().value;
+        URL.revokeObjectURL(oldUrl);
+        previewUrls.delete(oldPath);
+      }
+      return url;
+    })
+    .finally(() => previewLoading.delete(path));
+  previewLoading.set(path, promise);
+  return promise;
+}
+
+function renderQuickLook() {
+  const host = $("quicklook");
+  const file = S.preview && S.files.find((f) => f.name === S.preview);
+  if (!file) { S.preview = null; host.innerHTML = ""; return; }
+  const index = S.files.indexOf(file);
+  const meta = [file.camera, file.lens, file.film, file.date].filter(Boolean).join("  ·  ");
+  const placeholder = thumbUrls.get(file.path);
+  host.innerHTML = `
+    <div class="ql-backdrop" data-action="close-preview">
+      <div class="ql" role="dialog" aria-modal="true" aria-label="Preview of ${esc(file.name)}">
+        <button class="ql-close" data-action="close-preview" aria-label="Close preview">${IC.close}</button>
+        <button class="ql-nav prev" data-action="preview-prev" aria-label="Previous picture"${index === 0 ? " disabled" : ""}>${IC.chevronL}</button>
+        <div class="ql-stage">
+          <img class="ql-img${placeholder ? " loading" : ""}" alt="${esc(file.name)}"${placeholder ? ` src="${placeholder}"` : ""}>
+        </div>
+        <button class="ql-nav next" data-action="preview-next" aria-label="Next picture"${index === S.files.length - 1 ? " disabled" : ""}>${IC.chevronR}</button>
+        <div class="ql-caption">
+          <div class="ql-name">${esc(file.name)}<span class="ql-count">${index + 1} of ${S.files.length}</span></div>
+          ${meta ? `<div class="ql-meta">${esc(meta)}</div>` : ""}
+        </div>
+      </div>
+    </div>`;
+  const img = host.querySelector(".ql-img");
+  loadPreview(file.path)
+    .then((url) => {
+      if (S.preview !== file.name) return;   // the user has moved on
+      img.src = url;
+      img.classList.remove("loading");
+      // The neighbours are loaded in the background, so the arrow keys feel instant
+      [S.files[index + 1], S.files[index - 1]].filter(Boolean).forEach((n) => loadPreview(n.path).catch(() => {}));
+    })
+    .catch(() => {
+      if (S.preview !== file.name) return;
+      img.classList.remove("loading");
+      host.querySelector(".ql-stage").insertAdjacentHTML("beforeend", `<div class="ql-error">This picture could not be shown.</div>`);
+    });
+}
+
+function scrollRowIntoView(name) {
+  [...document.querySelectorAll(".row.file")].find((r) => r.dataset.row === name)?.scrollIntoView({ block: "nearest" });
+}
+
+// Selects exactly one file (used by the arrow keys)
+function selectOnly(name) {
+  S.selected = new Set([name]);
+  S.anchor = name;
+  updateSelectionUI();
+  scrollRowIntoView(name);
+}
+
+function openPreview() {
+  if (!S.folder || S.loading || S.modal || S.tab !== "manager" || !S.selected.size) return;
+  const first = S.files.find((f) => S.selected.has(f.name));
+  S.preview = S.selected.has(S.anchor) ? S.anchor : first.name;
+  renderQuickLook();
+}
+
+function closePreview() {
+  S.preview = null;
+  renderQuickLook();
+}
+
+function stepPreview(delta) {
+  const index = S.files.findIndex((f) => f.name === S.preview) + delta;
+  if (index < 0 || index >= S.files.length) return;
+  S.preview = S.files[index].name;
+  selectOnly(S.preview);
+  renderQuickLook();
+}
+
+// Arrow keys in the list move the selection up and down
+function moveSelection(delta) {
+  if (!S.files.length) return;
+  const names = S.files.map((f) => f.name);
+  const from = S.selected.has(S.anchor) ? names.indexOf(S.anchor) : -1;
+  const next = from < 0 ? (delta > 0 ? 0 : names.length - 1) : Math.min(names.length - 1, Math.max(0, from + delta));
+  selectOnly(names[next]);
+}
+
+// A field where typing happens (Space must stay a normal space there)
+const isTyping = (el) =>
+  !!el && (el.isContentEditable || ["TEXTAREA", "SELECT", "BUTTON"].includes(el.tagName) ||
+    (el.tagName === "INPUT" && !["checkbox", "radio"].includes(el.type)));
+
 // ── Thumbnails: loaded lazily, three at a time ────────────────────────────────
 const thumbUrls = new Map();   // path → object URL
 let thumbQueue = [];
@@ -338,6 +460,7 @@ function resetThumbnails() {
   thumbUrls.forEach((url) => URL.revokeObjectURL(url));
   thumbUrls.clear();
   thumbQueue = [];
+  clearPreviews();
 }
 
 function showThumb(img, url) {
@@ -1110,6 +1233,14 @@ getCurrentWebview().onDragDropEvent((event) => {
 
 // ── Event wiring (one delegated listener for everything) ──────────────────────
 document.addEventListener("click", (e) => {
+  if (S.preview) {
+    const hit = e.target.closest("[data-action]");
+    const emptySpace = ["ql-backdrop", "ql", "ql-stage"].some((c) => e.target.classList.contains(c));   // the dark area around the picture
+    if (hit?.dataset.action === "close-preview" && (hit.classList.contains("ql-close") || emptySpace)) closePreview();
+    else if (hit?.dataset.action === "preview-prev") stepPreview(-1);
+    else if (hit?.dataset.action === "preview-next") stepPreview(1);
+    return;
+  }
   // File list: click a row to select, Cmd/Ctrl-click to add, Shift-click for a range
   const row = e.target.closest(".row.file");
   if (row && !e.target.closest("input, button")) { selectRow(row.dataset.row, e); return; }
@@ -1126,6 +1257,7 @@ document.addEventListener("click", (e) => {
   if (t.dataset.action === "pick-folder") pickFolder();
   if (t.dataset.action === "open-folder") invoke("open_folder", { folder: S.folder }).catch((err) => { S.error = String(err); render(); });
   if (t.dataset.action === "save-edits") saveEdits();
+
   if (t.dataset.action === "close-snackbar") hideSnackbar();
   if (t.dataset.action === "discard-edits") discardEdits();
   if (t.dataset.action === "close-modal") closeModal();
@@ -1146,6 +1278,14 @@ document.addEventListener("change", (e) => {
 // Keep the message while the mouse is on it
 $("snackbar").addEventListener("mouseover", () => clearTimeout(snackTimer));
 $("snackbar").addEventListener("mouseout", () => { if ($("snackbar").firstElementChild) startSnackTimer(); });
+
+// Double click on a row also opens the quick look
+document.addEventListener("dblclick", (e) => {
+  const row = e.target.closest(".row.file");
+  if (!row || e.target.closest("input, button") || S.modal || S.preview) return;
+  selectOnly(row.dataset.row);
+  openPreview();
+});
 
 // Text fields write straight into the state (data-model="group.key")
 document.addEventListener("input", (e) => {
@@ -1172,6 +1312,24 @@ document.addEventListener("mousedown", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
+  // Quick look is open: Space or Esc closes it, the arrow keys browse
+  if (S.preview) {
+    if (e.key === " " || e.key === "Escape") { e.preventDefault(); closePreview(); }
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); stepPreview(-1); }
+    else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); stepPreview(1); }
+    return;
+  }
+  // Space does not scroll the page any more; in the file list it opens the quick look
+  if (e.key === " " && !isTyping(e.target) && !S.modal) {
+    e.preventDefault();
+    if (!e.repeat) openPreview();
+    return;
+  }
+  if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !isTyping(e.target) && !S.modal && S.tab === "manager" && S.folder && !S.loading) {
+    e.preventDefault();
+    moveSelection(e.key === "ArrowDown" ? 1 : -1);
+    return;
+  }
   const cellField = e.target.dataset?.edit;
   if (cellField && ["Enter", "ArrowDown", "ArrowUp"].includes(e.key)) {
     e.preventDefault();   // moves to the same column in the next or previous row
