@@ -283,6 +283,7 @@ function updateSelectionUI() {
   const count = $("sel-count");
   if (count) count.textContent = selectionText();
   updateQuickTools();
+  schedulePreload();
 }
 
 // Quick tools need a selection – they never act on the whole roll by accident
@@ -334,37 +335,59 @@ function toggleCheck(name, on) {
 }
 
 // ── Quick look: Space bar shows the selected picture large, like in the Finder ──
-const previewUrls = new Map();       // path → object URL of the large picture (the last few)
+const previewBitmaps = new Map();    // path → decoded picture (the last few), ready to be drawn
 const previewLoading = new Map();    // path → promise while it loads
-const PREVIEW_CACHE = 8;
+const PREVIEW_CACHE = 6;
 
 function clearPreviews(paths) {
-  const list = paths || [...previewUrls.keys()];
+  const list = paths || [...previewBitmaps.keys()];
   list.forEach((path) => {
-    const url = previewUrls.get(path);
-    if (url) URL.revokeObjectURL(url);
-    previewUrls.delete(path);
+    previewBitmaps.get(path)?.close();
+    previewBitmaps.delete(path);
     previewLoading.delete(path);
   });
 }
 
+// Rust sends raw pixels (width, height, then RGBA), so nothing has to be unpacked on the way
 function loadPreview(path) {
-  if (previewUrls.has(path)) return Promise.resolve(previewUrls.get(path));
+  if (previewBitmaps.has(path)) return Promise.resolve(previewBitmaps.get(path));
   if (previewLoading.has(path)) return previewLoading.get(path);
   const promise = invoke("get_preview", { path })
-    .then((bytes) => {
-      const url = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
-      previewUrls.set(path, url);
-      while (previewUrls.size > PREVIEW_CACHE) {
-        const [oldPath, oldUrl] = previewUrls.entries().next().value;
-        URL.revokeObjectURL(oldUrl);
-        previewUrls.delete(oldPath);
+    .then(async (bytes) => {
+      const buffer = bytes instanceof ArrayBuffer ? bytes : new Uint8Array(bytes).buffer;
+      const header = new DataView(buffer);
+      const width = header.getUint32(0, true), height = header.getUint32(4, true);
+      const pixels = new Uint8ClampedArray(buffer, 8, width * height * 4);
+      const bitmap = await createImageBitmap(new ImageData(pixels, width, height));
+      previewBitmaps.set(path, bitmap);
+      while (previewBitmaps.size > PREVIEW_CACHE) {
+        const [oldPath, oldBitmap] = previewBitmaps.entries().next().value;
+        oldBitmap.close();
+        previewBitmaps.delete(oldPath);
       }
-      return url;
+      return bitmap;
     })
     .finally(() => previewLoading.delete(path));
   previewLoading.set(path, promise);
   return promise;
+}
+
+// As soon as one file is selected, its large picture is prepared in the background,
+// so it is usually ready by the time Space is pressed
+let preloadTimer = null;
+function schedulePreload() {
+  clearTimeout(preloadTimer);
+  if (S.selected.size !== 1 || S.tab !== "manager") return;
+  preloadTimer = setTimeout(() => {
+    const file = S.files.find((f) => S.selected.has(f.name));
+    if (file) loadPreview(file.path).catch(() => {});
+  }, 200);
+}
+
+function drawPreview(canvas, bitmap) {
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext("2d").drawImage(bitmap, 0, 0);
 }
 
 function renderQuickLook() {
@@ -373,6 +396,7 @@ function renderQuickLook() {
   if (!file) { S.preview = null; host.innerHTML = ""; return; }
   const index = S.files.indexOf(file);
   const meta = [file.camera, file.lens, file.film, file.date].filter(Boolean).join("  ·  ");
+  const ready = previewBitmaps.get(file.path);
   const placeholder = thumbUrls.get(file.path);
   host.innerHTML = `
     <div class="ql-backdrop" data-action="close-preview">
@@ -380,7 +404,8 @@ function renderQuickLook() {
         <button class="ql-close" data-action="close-preview" aria-label="Close preview">${IC.close}</button>
         <button class="ql-nav prev" data-action="preview-prev" aria-label="Previous picture"${index === 0 ? " disabled" : ""}>${IC.chevronL}</button>
         <div class="ql-stage">
-          <img class="ql-img${placeholder ? " loading" : ""}" alt="${esc(file.name)}"${placeholder ? ` src="${placeholder}"` : ""}>
+          ${ready ? "" : `<img class="ql-img loading" alt="${esc(file.name)}"${placeholder ? ` src="${placeholder}"` : ""}>`}
+          <canvas class="ql-img" aria-label="${esc(file.name)}"${ready ? "" : " hidden"}></canvas>
         </div>
         <button class="ql-nav next" data-action="preview-next" aria-label="Next picture"${index === S.files.length - 1 ? " disabled" : ""}>${IC.chevronR}</button>
         <div class="ql-caption">
@@ -389,20 +414,22 @@ function renderQuickLook() {
         </div>
       </div>
     </div>`;
-  const img = host.querySelector(".ql-img");
-  loadPreview(file.path)
-    .then((url) => {
-      if (S.preview !== file.name) return;   // the user has moved on
-      img.src = url;
-      img.classList.remove("loading");
-      // The neighbours are loaded in the background, so the arrow keys feel instant
-      [S.files[index + 1], S.files[index - 1]].filter(Boolean).forEach((n) => loadPreview(n.path).catch(() => {}));
-    })
-    .catch(() => {
-      if (S.preview !== file.name) return;
-      img.classList.remove("loading");
-      host.querySelector(".ql-stage").insertAdjacentHTML("beforeend", `<div class="ql-error">This picture could not be shown.</div>`);
-    });
+  const canvas = host.querySelector("canvas");
+  const stage = host.querySelector(".ql-stage");
+  const show = (bitmap) => {
+    if (S.preview !== file.name) return;   // the user has moved on
+    drawPreview(canvas, bitmap);
+    canvas.hidden = false;
+    stage.querySelector("img")?.remove();
+    // The neighbours are loaded in the background, so the arrow keys feel instant
+    [S.files[index + 1], S.files[index - 1]].filter(Boolean).forEach((n) => loadPreview(n.path).catch(() => {}));
+  };
+  if (ready) { show(ready); return; }
+  loadPreview(file.path).then(show).catch(() => {
+    if (S.preview !== file.name) return;
+    stage.querySelector("img")?.classList.remove("loading");
+    stage.insertAdjacentHTML("beforeend", `<div class="ql-error">This picture could not be shown.</div>`);
+  });
 }
 
 function scrollRowIntoView(name) {

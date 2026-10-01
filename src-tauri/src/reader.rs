@@ -121,9 +121,8 @@ fn read_info(path: &Path) -> FileInfo {
     info
 }
 
-/// A JPEG preview of any supported image that fits into `size` × `size` pixels,
-/// turned the way the picture is meant to be seen. Also returns its width and height.
-pub(crate) fn make_thumbnail_sized(path: &Path, size: u32, quality: u8) -> Result<(Vec<u8>, u32, u32), String> {
+/// The picture scaled down to fit into `size` × `size` pixels, turned the way it is meant to be seen.
+fn scaled_picture(path: &Path, size: u32) -> Result<image::RgbImage, String> {
     let image = image::open(path)
         .map_err(|e| format!("Could not read \"{}\": {e}", file_name(path)))?;
     // Only ever scale down; a picture that is already small stays as it is
@@ -133,13 +132,32 @@ pub(crate) fn make_thumbnail_sized(path: &Path, size: u32, quality: u8) -> Resul
     if let Some(turn) = image::metadata::Orientation::from_exif(orientation as u8) {
         small.apply_orientation(turn);
     }
-    let small = small.to_rgb8();
+    Ok(small.to_rgb8())
+}
+
+/// A JPEG preview of any supported image that fits into `size` × `size` pixels.
+/// Also returns its width and height.
+pub(crate) fn make_thumbnail_sized(path: &Path, size: u32, quality: u8) -> Result<(Vec<u8>, u32, u32), String> {
+    let small = scaled_picture(path, size)?;
     let (width, height) = small.dimensions();
     let mut bytes = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, quality)
         .encode_image(&small)
         .map_err(|e| e.to_string())?;
     Ok((bytes, width, height))
+}
+
+/// Raw pixels for the quick look: width and height as two little-endian u32, then RGBA.
+/// Skipping the JPEG step saves a few hundred milliseconds on big scans.
+fn make_preview_pixels(path: &Path) -> Result<Vec<u8>, String> {
+    let picture = scaled_picture(path, PREVIEW_SIZE)?;
+    let (width, height) = picture.dimensions();
+    let rgba = image::DynamicImage::ImageRgb8(picture).into_rgba8();
+    let mut bytes = Vec::with_capacity(8 + rgba.as_raw().len());
+    bytes.extend_from_slice(&width.to_le_bytes());
+    bytes.extend_from_slice(&height.to_le_bytes());
+    bytes.extend_from_slice(rgba.as_raw());
+    Ok(bytes)
 }
 
 fn make_thumbnail(path: &Path) -> Result<Vec<u8>, String> {
@@ -170,11 +188,11 @@ pub async fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String>
         .map(tauri::ipc::Response::new)
 }
 
-/// Large preview picture for the quick look (Space bar), as raw JPEG bytes.
+/// Large preview picture for the quick look (Space bar), as raw pixels (see `make_preview_pixels`).
 #[tauri::command]
 pub async fn get_preview(path: String) -> Result<tauri::ipc::Response, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        make_thumbnail_sized(Path::new(&path), PREVIEW_SIZE, 88).map(|(bytes, _, _)| bytes)
+        make_preview_pixels(Path::new(&path))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -269,10 +287,48 @@ mod tests {
         let (bytes, width, height) = make_thumbnail_sized(&path, PREVIEW_SIZE, 88).unwrap();
         assert_eq!((width, height), (1600, 1067));
         assert_eq!(&bytes[..2], &[0xFF, 0xD8]);
+        // the quick look gets raw pixels with a small header
+        let pixels = make_preview_pixels(&path).unwrap();
+        let (w, h) = (u32::from_le_bytes(pixels[0..4].try_into().unwrap()), u32::from_le_bytes(pixels[4..8].try_into().unwrap()));
+        assert_eq!((w, h), (1600, 1067));
+        assert_eq!(pixels.len(), 8 + (w * h * 4) as usize);
+        // first pixel: the colour of the picture (JPEG may shift it by a hair), fully opaque
+        for (got, want) in pixels[8..11].iter().zip([90i32, 140, 200]) {
+            assert!((*got as i32 - want).abs() <= 3);
+        }
+        assert_eq!(pixels[11], 255);
         // a small picture is not blown up
         image::RgbImage::from_pixel(400, 300, image::Rgb([1, 2, 3])).save(dir.join("small.jpg")).unwrap();
         let (_, width, _) = make_thumbnail_sized(&dir.join("small.jpg"), PREVIEW_SIZE, 88).unwrap();
         assert_eq!(width, 400);
+    }
+
+    /// How long the quick look takes for a big scan. Not part of the normal tests, run by hand:
+    ///   cargo test bench_preview -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn bench_preview() {
+        let dir = std::env::temp_dir().join("filmroll_bench");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        // 6000 × 4000 px with noise, so the file is as heavy as a real scan
+        let mut seed = 12345u32;
+        let img = image::RgbImage::from_fn(6000, 4000, |x, y| {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            let n = (seed >> 24) as u8 / 8;
+            image::Rgb([((x / 24) as u8).wrapping_add(n), ((y / 16) as u8).wrapping_add(n), (((x + y) / 40) as u8).wrapping_add(n)])
+        });
+        for name in ["big.jpg", "big.tif"] {
+            let path = dir.join(name);
+            img.save(&path).unwrap();
+            let size_mb = fs::metadata(&path).unwrap().len() / 1_000_000;
+            let start = std::time::Instant::now();
+            let bytes = make_preview_pixels(&path).unwrap();
+            eprintln!("{name} ({size_mb} MB): {} ms, {} MB sent to the screen", start.elapsed().as_millis(), bytes.len() / 1_000_000);
+            let start = std::time::Instant::now();
+            let _ = make_thumbnail_sized(&path, 1600, 88).unwrap();
+            eprintln!("{name}: {} ms if the picture was packed as JPEG first (the old way)", start.elapsed().as_millis());
+        }
     }
 
     #[test]
