@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FilmRoll Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="titlebar" data-tauri-drag-region>
+    <div class="titlebar-center" data-tauri-drag-region>
+      <span class="titlebar-title" data-tauri-drag-region>FilmRoll Manager</span>
+      <span class="titlebar-sub" data-tauri-drag-region>by @MicheleHimself</span>
+    </div>
+    <span class="titlebar-version" data-tauri-drag-region>v0.1.0</span>
+  </header>
+
+  <nav class="steps" aria-label="Progress">
+    <div class="step"><div class="step-num" id="sn1">1</div><div class="step-text" id="st1">Select Folder</div></div>
+    <div class="step-line" id="sl1"></div>
+    <div class="step"><div class="step-num" id="sn2">2</div><div class="step-text" id="st2">Frame Order</div></div>
+    <div class="step-line" id="sl2"></div>
+    <div class="step"><div class="step-num" id="sn3">3</div><div class="step-text" id="st3">Metadata</div></div>
+    <div class="step-line" id="sl3"></div>
+    <div class="step"><div class="step-num" id="sn4">4</div><div class="step-text" id="st4">Rename</div></div>
+  </nav>
+
+  <main class="content" id="content"></main>
+
+  <footer class="bottom" id="bottom">
+    <span class="step-counter" id="step-counter">Step 1 of 4</span>
+    <div class="bottom-right">
+      <button class="btn btn-ghost" id="btn-back" hidden>← Back</button>
+      <button class="btn btn-primary" id="btn-next" disabled>Continue →</button>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
