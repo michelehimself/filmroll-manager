@@ -8,7 +8,6 @@ use little_exif::exif_tag::ExifTag;
 use little_exif::metadata::Metadata;
 use serde::Serialize;
 use std::fs;
-use std::io::Cursor;
 use std::path::Path;
 
 const THUMBNAIL_SIZE: u32 = 200;
@@ -21,6 +20,7 @@ pub struct FileInfo {
     lens: String,
     film: String,
     date: String, // "YYYY-MM-DD HH:MM:SS", empty if unknown
+    aspect: f64,  // width / height as the picture is shown (after Rotate), 1.5 for a normal landscape frame
 }
 
 // ───────────────────────────── Helpers ─────────────────────────────
@@ -62,10 +62,27 @@ fn read_xmp_label(path: &Path) -> Option<String> {
     None
 }
 
+/// Width / height as the picture is meant to be seen. 1.5 if the size cannot be read.
+fn aspect_from(path: &Path, orientation: u16) -> f64 {
+    match imagesize::size(path) {
+        Ok(size) if size.width > 0 && size.height > 0 => {
+            let ratio = size.width as f64 / size.height as f64;
+            if orientation >= 5 { 1.0 / ratio } else { ratio }   // orientations 5–8 turn the picture by 90°
+        }
+        _ => 1.5,
+    }
+}
+
+pub(crate) fn read_aspect(path: &Path) -> f64 {
+    let orientation = Metadata::new_from_path(path).map(|exif| read_orientation(&exif)).unwrap_or(1);
+    aspect_from(path, orientation)
+}
+
 fn read_info(path: &Path) -> FileInfo {
     let mut info = FileInfo {
         name: file_name(path),
         path: path.to_string_lossy().into_owned(),
+        aspect: 1.5,
         ..FileInfo::default()
     };
 
@@ -74,8 +91,10 @@ fn read_info(path: &Path) -> FileInfo {
         if is_jpeg(path) {
             info.film = read_xmp_label(path).unwrap_or_default();
         }
+        info.aspect = aspect_from(path, 1);
         return info;
     };
+    info.aspect = aspect_from(path, read_orientation(&exif));
 
     if let Some(ExifTag::Model(text)) = exif.get_tag(&ExifTag::Model(String::new())).next() {
         info.camera = clean(text);
@@ -100,22 +119,28 @@ fn read_info(path: &Path) -> FileInfo {
     info
 }
 
-/// A small JPEG preview of any supported image.
-fn make_thumbnail(path: &Path) -> Result<Vec<u8>, String> {
+/// A JPEG preview of any supported image that fits into `size` × `size` pixels,
+/// turned the way the picture is meant to be seen. Also returns its width and height.
+pub(crate) fn make_thumbnail_sized(path: &Path, size: u32, quality: u8) -> Result<(Vec<u8>, u32, u32), String> {
     let image = image::open(path)
         .map_err(|e| format!("Could not read \"{}\": {e}", file_name(path)))?;
-    let mut small = image.thumbnail(THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+    let mut small = image.thumbnail(size, size);
     // Show the picture the way it is meant to be seen (after Rotate, for example)
     let orientation = Metadata::new_from_path(path).map(|exif| read_orientation(&exif)).unwrap_or(1);
     if let Some(turn) = image::metadata::Orientation::from_exif(orientation as u8) {
         small.apply_orientation(turn);
     }
     let small = small.to_rgb8();
+    let (width, height) = small.dimensions();
     let mut bytes = Vec::new();
-    small
-        .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Jpeg)
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, quality)
+        .encode_image(&small)
         .map_err(|e| e.to_string())?;
-    Ok(bytes)
+    Ok((bytes, width, height))
+}
+
+fn make_thumbnail(path: &Path) -> Result<Vec<u8>, String> {
+    make_thumbnail_sized(path, THUMBNAIL_SIZE, 80).map(|(bytes, _, _)| bytes)
 }
 
 // ───────────────────────────── Commands ─────────────────────────────

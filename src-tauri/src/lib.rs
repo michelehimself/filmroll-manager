@@ -1,5 +1,6 @@
 mod processor;
 mod reader;
+mod sheet;
 mod store;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -17,6 +18,8 @@ pub fn run() {
             reader::read_folder,
             reader::get_thumbnail,
             reader::open_folder,
+            sheet::contact_sheet_layout,
+            sheet::save_contact_sheet,
             store::load_store,
             store::save_store
         ])

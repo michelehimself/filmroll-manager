@@ -23,6 +23,7 @@ natord = "1.0"
 imagesize = "0.13"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
+pdf-writer = "0.15.0"
 
 # Decoding large scans is slow in debug builds, so optimise the libraries even there
 [profile.dev.package."*"]

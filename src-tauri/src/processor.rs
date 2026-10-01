@@ -74,7 +74,7 @@ pub(crate) fn select_images(folder: &Path, only: Option<&[String]>) -> Result<Ve
     Ok(chosen)
 }
 
-fn emit_progress(app: &AppHandle, value: f64) {
+pub(crate) fn emit_progress(app: &AppHandle, value: f64) {
     let _ = app.emit("progress", value);
 }
 
