@@ -511,7 +511,8 @@ function selectOnly(name) {
 }
 
 function openPreview() {
-  if (!S.folder || S.loading || S.modal || S.tab !== "manager" || !S.selected.size) return;
+  if (!S.folder || S.loading || S.modal || S.tab !== "manager" || !S.files.length) return;
+  if (!S.selected.size) selectOnly(S.files[0].name);   // nothing selected yet: start with the first picture
   const first = S.files.find((f) => S.selected.has(f.name));
   S.preview = S.selected.has(S.anchor) ? S.anchor : first.name;
   renderQuickLook();
