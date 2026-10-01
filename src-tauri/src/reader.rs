@@ -142,6 +142,28 @@ pub async fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String>
         .map(tauri::ipc::Response::new)
 }
 
+/// Shows the folder in Finder / Explorer / the Linux file manager. Changes nothing.
+#[tauri::command]
+pub fn open_folder(folder: String) -> Result<(), String> {
+    let path = Path::new(&folder);
+    if !path.is_dir() {
+        return Err("This folder does not exist any more.".to_string());
+    }
+    let program = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(target_os = "windows") {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    // Explorer reports an error code even when it works, so only a failed start counts
+    std::process::Command::new(program)
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Could not open the folder: {e}"))
+}
+
 // ───────────────────────────── Tests ─────────────────────────────
 
 #[cfg(test)]
@@ -196,6 +218,12 @@ mod tests {
         let dir = tiny_jpeg_folder("thumb", 1);
         let bytes = make_thumbnail(&dir.join("scan_1.jpg")).unwrap();
         assert_eq!(&bytes[..2], &[0xFF, 0xD8]);
+    }
+
+    #[test]
+    fn missing_folder_is_not_opened() {
+        let err = open_folder("/this/folder/does/not/exist".to_string()).unwrap_err();
+        assert!(err.contains("does not exist"));
     }
 
     #[test]

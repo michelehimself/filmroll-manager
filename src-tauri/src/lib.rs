@@ -16,6 +16,7 @@ pub fn run() {
             processor::write_edits,
             reader::read_folder,
             reader::get_thumbnail,
+            reader::open_folder,
             store::load_store,
             store::save_store
         ])

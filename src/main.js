@@ -42,6 +42,9 @@ const IC = {
   sheet:     svg(22, 1.6, `<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>`),
 };
 
+const FILE_MANAGER_LABEL = navigator.userAgent.includes("Mac") ? "Open in Finder"
+  : navigator.userAgent.includes("Windows") ? "Open in Explorer" : "Open Folder";
+
 // ── Tabs and tools ────────────────────────────────────────────────────────────
 const TABS = [
   { id: "manager", label: "Manager", icon: IC.folder },
@@ -215,6 +218,8 @@ function updateEditBar() {
   });
   const note = $("sidebar-note");
   if (note) note.hidden = n === 0;
+  const folderTools = $("folder-tools");
+  if (folderTools) folderTools.hidden = n > 0;   // Rotate, Open in Finder, Change Folder wait for Save or Discard
 }
 
 async function saveEdits() {
@@ -458,12 +463,15 @@ function viewExplorer() {
           <button class="btn btn-ghost" data-action="discard-edits">Discard</button>
           <button class="btn btn-primary" id="save-edits" data-action="save-edits">Save Changes</button>
         </div>
-        <div class="quick" role="group" aria-label="Quick tools">
-          <span class="quick-label">Rotate</span>
-          <button class="btn btn-ghost square" data-rotate="ccw" title="Rotate counterclockwise" aria-label="Rotate selected files counterclockwise" disabled>${IC.rotateCcw}</button>
-          <button class="btn btn-ghost square" data-rotate="cw" title="Rotate clockwise" aria-label="Rotate selected files clockwise" disabled>${IC.rotateCw}</button>
+        <div class="folder-tools" id="folder-tools">
+          <div class="quick" role="group" aria-label="Quick tools">
+            <span class="quick-label">Rotate</span>
+            <button class="btn btn-ghost square" data-rotate="ccw" title="Rotate counterclockwise" aria-label="Rotate selected files counterclockwise" disabled>${IC.rotateCcw}</button>
+            <button class="btn btn-ghost square" data-rotate="cw" title="Rotate clockwise" aria-label="Rotate selected files clockwise" disabled>${IC.rotateCw}</button>
+          </div>
+          <button class="btn btn-ghost" data-action="open-folder">${FILE_MANAGER_LABEL}</button>
+          <button class="btn btn-ghost" data-action="pick-folder">Change Folder…</button>
         </div>
-        <button class="btn btn-ghost" data-action="pick-folder">Change Folder…</button>
       </div>
       ${error}
       <div class="filelist">
@@ -994,6 +1002,7 @@ document.addEventListener("click", (e) => {
   if (t.dataset.gearRemove) removeGear(t.dataset.gearRemove, t.dataset.name);
   if (t.dataset.action === "toggle-fav-filter") { S.filmFavoritesOnly = !S.filmFavoritesOnly; render(); }
   if (t.dataset.action === "pick-folder") pickFolder();
+  if (t.dataset.action === "open-folder") invoke("open_folder", { folder: S.folder }).catch((err) => { S.error = String(err); render(); });
   if (t.dataset.action === "save-edits") saveEdits();
   if (t.dataset.action === "close-snackbar") hideSnackbar();
   if (t.dataset.action === "discard-edits") discardEdits();
