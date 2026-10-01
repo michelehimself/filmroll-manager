@@ -1155,20 +1155,11 @@ function bodyShortcuts() {
   const keys = (list) => list.map((k) => `<span class="keycap">${esc(k)}</span>`).join("");
   const groups = [
     ["File list", [
-      [["Space"], "Enlarge the selected picture (starts with the first picture if nothing is selected)"],
-      [["↑", "↓"], "Select the previous or next picture"],
+      [["Space"], "Enlarge the selected picture"],
       [[MOD, "R"], "Rotate the selected pictures clockwise"],
       [[MOD, "L"], "Rotate the selected pictures counterclockwise"],
-      [[MOD, "Click"], "Add a picture to the selection"],
-      [["Shift", "Click"], "Select a range of pictures"],
-    ]],
-    ["In an input field of the list", [
-      [["Enter"], "Jump to the same field in the next row"],
-      [["Esc"], "Restore the original value"],
     ]],
     ["Large preview", [
-      [["Space"], "Close the preview (Esc works, too)"],
-      [["←", "→"], "Show the previous or next picture"],
       [["R"], "Rotate the picture clockwise"],
       [["L"], "Rotate the picture counterclockwise"],
     ]],
