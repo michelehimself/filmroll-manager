@@ -20,10 +20,14 @@ const LABEL_H: f64 = 4.2;
 const TITLE_PT: f64 = 16.0;
 const SUBTITLE_PT: f64 = 9.0;
 const LABEL_PT: f64 = 6.5;
-// Header, measured from the top edge of the page
-const TITLE_BASELINE: f64 = 18.0;
-const SUBTITLE_BASELINE: f64 = 24.0;
-const RULE_Y: f64 = 28.0;
+// Header lines, measured from the top edge of the page. A line that is empty is left out
+// and the ones below move up.
+const FIRST_BASELINE: f64 = 18.0;
+const TITLE_TO_NEXT: f64 = 6.0;
+const LINE_TO_NEXT: f64 = 5.0;
+const LAST_BASELINE_TO_RULE: f64 = 4.0;
+const RULE_TO_GRID: f64 = 4.0;
+/// Where the grid starts at the earliest when there is a header (title and info line)
 const GRID_Y_WITH_HEADER: f64 = 32.0;
 /// Picture size inside the PDF: sharp enough for print, small enough to stay a light file
 const PDF_PICTURE_PX: u32 = 640;
@@ -38,6 +42,8 @@ pub struct SheetOptions {
     show_names: bool,
     title: String,
     subtitle: String,
+    /// Where the film was scanned (free text)
+    scanned_at: String,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -54,8 +60,11 @@ pub struct Layout {
     page_h: f64,
     margin: f64,
     has_header: bool,
-    title_baseline: f64,
-    subtitle_baseline: f64,
+    /// Baseline of each header line; `None` if that line is empty and not drawn
+    title_baseline: Option<f64>,
+    subtitle_baseline: Option<f64>,
+    scan_baseline: Option<f64>,
+    scan_text: String,
     rule_y: f64,
     title_pt: f64,
     subtitle_pt: f64,
@@ -106,9 +115,28 @@ fn choose_columns(n: usize, grid_w: f64, grid_h: f64, aspect: f64) -> usize {
 
 pub fn layout(aspects: &[f64], options: &SheetOptions) -> Layout {
     let (page_w, page_h) = if options.landscape { (PAGE.1, PAGE.0) } else { PAGE };
-    let has_header = !options.title.trim().is_empty() || !options.subtitle.trim().is_empty();
+    let scan_text = if options.scanned_at.trim().is_empty() {
+        String::new()
+    } else {
+        format!("Scanned at: {}", options.scanned_at.trim())
+    };
+    let wanted = [!options.title.trim().is_empty(), !options.subtitle.trim().is_empty(), !scan_text.is_empty()];
+    let has_header = wanted.iter().any(|w| *w);
+
+    // Stack the lines that have text
+    let mut baselines = [None; 3];
+    let mut next = FIRST_BASELINE;
+    let mut last = FIRST_BASELINE;
+    for (i, present) in wanted.iter().enumerate() {
+        if *present {
+            baselines[i] = Some(next);
+            last = next;
+            next += if i == 0 { TITLE_TO_NEXT } else { LINE_TO_NEXT };
+        }
+    }
+    let rule_y = last + LAST_BASELINE_TO_RULE;
     let grid_x = MARGIN;
-    let grid_y = if has_header { GRID_Y_WITH_HEADER } else { MARGIN };
+    let grid_y = if has_header { rule_y + RULE_TO_GRID } else { MARGIN };
     let grid_w = page_w - 2.0 * MARGIN;
     let grid_h = page_h - MARGIN - grid_y;
 
@@ -137,9 +165,11 @@ pub fn layout(aspects: &[f64], options: &SheetOptions) -> Layout {
         page_h,
         margin: MARGIN,
         has_header,
-        title_baseline: TITLE_BASELINE,
-        subtitle_baseline: SUBTITLE_BASELINE,
-        rule_y: RULE_Y,
+        title_baseline: baselines[0],
+        subtitle_baseline: baselines[1],
+        scan_baseline: baselines[2],
+        scan_text,
+        rule_y,
         title_pt: TITLE_PT,
         subtitle_pt: SUBTITLE_PT,
         label_pt: LABEL_PT,
@@ -253,20 +283,18 @@ fn build_pdf(layout: &Layout, options: &SheetOptions, names: &[String], pictures
 
     if layout.has_header {
         let max_w = (layout.page_w - 2.0 * layout.margin) * MM_TO_PT;
-        let title = fit_text(options.title.trim(), layout.title_pt, max_w);
-        let subtitle = fit_text(options.subtitle.trim(), layout.subtitle_pt, max_w);
-        c.begin_text();
-        c.set_fill_gray(0.1);
-        c.set_font(Name(b"F2"), layout.title_pt as f32);
-        c.next_line(pt(layout.margin), y_up(layout.title_baseline));
-        c.show(Str(&win_ansi(&title)));
-        c.end_text();
-        c.begin_text();
-        c.set_fill_gray(0.35);
-        c.set_font(Name(b"F1"), layout.subtitle_pt as f32);
-        c.next_line(pt(layout.margin), y_up(layout.subtitle_baseline));
-        c.show(Str(&win_ansi(&subtitle)));
-        c.end_text();
+        let mut line = |text: &str, baseline: Option<f64>, font: &'static [u8], size: f64, gray: f32| {
+            let Some(baseline) = baseline else { return };
+            c.begin_text();
+            c.set_fill_gray(gray);
+            c.set_font(Name(font), size as f32);
+            c.next_line(pt(layout.margin), y_up(baseline));
+            c.show(Str(&win_ansi(&fit_text(text, size, max_w))));
+            c.end_text();
+        };
+        line(options.title.trim(), layout.title_baseline, b"F2", layout.title_pt, 0.1);
+        line(options.subtitle.trim(), layout.subtitle_baseline, b"F1", layout.subtitle_pt, 0.35);
+        line(&layout.scan_text, layout.scan_baseline, b"F1", layout.subtitle_pt, 0.35);
         c.set_stroke_gray(0.8);
         c.set_line_width(0.5);
         c.set_line_cap(LineCapStyle::ButtCap);
@@ -371,6 +399,7 @@ mod tests {
         SheetOptions {
             landscape: false, columns: None, show_names: false,
             title: "Roll 12".into(), subtitle: "Kodak Portra 400 · Pentax 17".into(),
+            scanned_at: String::new(),
         }
     }
 
@@ -427,6 +456,29 @@ mod tests {
     }
 
     #[test]
+    fn scan_place_gets_its_own_line_and_lines_move_up_when_empty() {
+        let mut o = options();
+        let without = layout(&[1.5; 36], &o);
+        assert_eq!(without.scan_baseline, None);
+        assert_eq!(without.scan_text, "");
+
+        o.scanned_at = "  Fotolabor Müller, Hamburg ".into();
+        let with = layout(&[1.5; 36], &o);
+        assert_eq!(with.scan_text, "Scanned at: Fotolabor Müller, Hamburg");
+        assert!(with.scan_baseline.unwrap() > with.subtitle_baseline.unwrap());
+        assert!(with.cells[0].y > without.cells[0].y);   // the grid starts lower
+        assert_fits(&with);
+
+        // Only the scan place: it takes the first line, nothing is left blank above it
+        o.title = "".into();
+        o.subtitle = "".into();
+        let only = layout(&[1.5; 36], &o);
+        assert_eq!((only.title_baseline, only.subtitle_baseline), (None, None));
+        assert_eq!(only.scan_baseline, Some(FIRST_BASELINE));
+        assert_fits(&only);
+    }
+
+    #[test]
     fn no_header_means_more_room() {
         let mut o = options();
         o.title = " ".into();
@@ -460,6 +512,7 @@ mod tests {
         }
         let mut o = options();
         o.subtitle = "Kodak Portra 400  ·  Pentax 17  ·  HD Pentax 25mm F/3.5  ·  2026-05-01".into();
+        o.scanned_at = "Fotolabor Müller".into();
         o.show_names = true;
         save_in(&dir, None, &o, &dir.join("portrait.pdf"), &|_| {}).unwrap();
         o.landscape = true;

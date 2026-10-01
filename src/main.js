@@ -85,7 +85,7 @@ let S = {
   busy: false,    // a tool is writing to the files
   meta: { camera: "", lens: "", film: "", date: todayString(), time: "12:00" },
   rename: { date: "", film: "" },
-  sheet: { title: "", subtitle: "", orientation: "portrait", columns: "auto", showNames: false },   // values behind the Date and Film Name tags
+  sheet: { title: "", subtitle: "", scannedAt: "", orientation: "portrait", columns: "auto", showNames: false },   // values behind the Date and Film Name tags
   template: [],                      // [{ kind, value? }]
   store: { favorites: [], cameras: [], lenses: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
@@ -833,6 +833,7 @@ const sheetOptions = () => ({
   showNames: S.sheet.showNames,
   title: S.sheet.title,
   subtitle: S.sheet.subtitle,
+  scannedAt: S.sheet.scannedAt,
 });
 
 function bodySheet() {
@@ -855,6 +856,7 @@ function bodySheet() {
       <div class="sheet-controls fields">
         ${text("title", "Title", "e.g. Roll 12")}
         ${text("subtitle", "Info line", "Film, camera, lens, date")}
+        ${text("scannedAt", "Scanned at", "e.g. lab or scanner")}
         ${select("orientation", "Page", [["portrait", "A4 portrait"], ["landscape", "A4 landscape"]])}
         ${select("columns", "Frames per row", columns)}
         <label class="check-line"><input type="checkbox" data-model="sheet.showNames"${S.sheet.showNames ? " checked" : ""}> Show file names</label>
@@ -894,9 +896,10 @@ async function renderSheetPreview() {
 
   let html = `<div class="sheet-page" style="width:${px(layout.pageW)};height:${px(layout.pageH)}">`;
   if (layout.hasHeader) {
-    const line = (text, baseline, size, cls) => `<div class="sheet-text ${cls}" style="left:${px(layout.margin)};top:${px(baseline - size * 0.3528 * 0.85)};width:${px(layout.pageW - 2 * layout.margin)};font-size:${ptPx(size)}">${esc(text)}</div>`;
+    const line = (text, baseline, size, cls) => baseline == null ? "" : `<div class="sheet-text ${cls}" style="left:${px(layout.margin)};top:${px(baseline - size * 0.3528 * 0.85)};width:${px(layout.pageW - 2 * layout.margin)};font-size:${ptPx(size)}">${esc(text)}</div>`;
     html += line(S.sheet.title.trim(), layout.titleBaseline, layout.titlePt, "title");
     html += line(S.sheet.subtitle.trim(), layout.subtitleBaseline, layout.subtitlePt, "subtitle");
+    html += line(layout.scanText, layout.scanBaseline, layout.subtitlePt, "subtitle");
     html += `<div class="sheet-rule" style="left:${px(layout.margin)};top:${px(layout.ruleY)};width:${px(layout.pageW - 2 * layout.margin)}"></div>`;
   }
   layout.cells.forEach((cell, i) => {
