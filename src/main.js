@@ -402,15 +402,21 @@ function renderQuickLook() {
     <div class="ql-backdrop" data-action="close-preview">
       <div class="ql" role="dialog" aria-modal="true" aria-label="Preview of ${esc(file.name)}">
         <button class="ql-close" data-action="close-preview" aria-label="Close preview">${IC.close}</button>
+        <div class="ql-caption">
+          <div class="ql-name">${esc(file.name)}<span class="ql-count">${index + 1} of ${S.files.length}</span></div>
+          ${meta ? `<div class="ql-meta">${esc(meta)}</div>` : ""}
+        </div>
         <button class="ql-nav prev" data-action="preview-prev" aria-label="Previous picture"${index === 0 ? " disabled" : ""}>${IC.chevronL}</button>
         <div class="ql-stage">
           ${ready ? "" : `<img class="ql-img loading" alt="${esc(file.name)}"${placeholder ? ` src="${placeholder}"` : ""}>`}
           <canvas class="ql-img" aria-label="${esc(file.name)}"${ready ? "" : " hidden"}></canvas>
         </div>
         <button class="ql-nav next" data-action="preview-next" aria-label="Next picture"${index === S.files.length - 1 ? " disabled" : ""}>${IC.chevronR}</button>
-        <div class="ql-caption">
-          <div class="ql-name">${esc(file.name)}<span class="ql-count">${index + 1} of ${S.files.length}</span></div>
-          ${meta ? `<div class="ql-meta">${esc(meta)}</div>` : ""}
+        <div class="ql-actions">
+          <span class="ql-action-label">Rotate left</span>
+          <button class="ql-key" data-action="preview-rotate-left" aria-label="Rotate left (L)" title="Rotate left (L)">L</button>
+          <button class="ql-key" data-action="preview-rotate-right" aria-label="Rotate right (R)" title="Rotate right (R)">R</button>
+          <span class="ql-action-label">Rotate right</span>
         </div>
       </div>
     </div>`;
@@ -430,6 +436,66 @@ function renderQuickLook() {
     stage.querySelector("img")?.classList.remove("loading");
     stage.insertAdjacentHTML("beforeend", `<div class="ql-error">This picture could not be shown.</div>`);
   });
+}
+
+// ── Rotating from the quick look (R and L) ────────────────────────────────────
+// The picture turns on screen at once; the turn is written into the file in the background (in order)
+let turnChain = Promise.resolve();     // turns of the picture on screen
+let writeChain = Promise.resolve();    // turns written into the files
+
+async function turnBitmap(bitmap, clockwise) {
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.height;
+  canvas.height = bitmap.width;
+  const ctx = canvas.getContext("2d");
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((clockwise ? 1 : -1) * Math.PI / 2);
+  ctx.drawImage(bitmap, -bitmap.width / 2, -bitmap.height / 2);
+  return createImageBitmap(canvas);
+}
+
+// The small picture in the list is made again from the turned file
+function refreshRowThumbnail(path) {
+  const url = thumbUrls.get(path);
+  if (url) { URL.revokeObjectURL(url); thumbUrls.delete(path); }
+  const img = [...document.querySelectorAll(".thumb img")].find((i) => i.dataset.path === path);
+  if (!img) return;
+  img.classList.remove("loaded");
+  thumbQueue.push(img);
+  pumpThumbnails();
+}
+
+function rotatePreview(clockwise) {
+  const file = S.preview && S.files.find((f) => f.name === S.preview);
+  if (!file) return;
+  const { path, name } = file;
+
+  turnChain = turnChain.then(async () => {
+    file.aspect = 1 / (file.aspect || 1.5);   // a quarter turn swaps width and height
+    const bitmap = previewBitmaps.get(path);
+    if (!bitmap) return;                       // not loaded yet: it is loaded again after the file was written
+    const turned = await turnBitmap(bitmap, clockwise);
+    bitmap.close();
+    previewBitmaps.set(path, turned);
+    const canvas = S.preview === name ? document.querySelector(".ql canvas") : null;
+    if (canvas) drawPreview(canvas, turned);
+  }).catch(() => {});
+
+  writeChain = writeChain
+    .then(() => invoke("rotate_images", { folder: S.folder, files: [name], clockwise }))
+    .then(() => {
+      refreshRowThumbnail(path);
+      if (!previewBitmaps.has(path)) { clearPreviews([path]); if (S.preview === name) renderQuickLook(); }
+    })
+    .catch(async (e) => {
+      // The file could not be changed: show what is really in it
+      clearPreviews([path]);
+      await refreshFolder({ keepThumbnails: true }).catch(() => {});
+      if (S.preview === name) {
+        renderQuickLook();
+        $("quicklook").querySelector(".ql-stage")?.insertAdjacentHTML("beforeend", `<div class="ql-error">${esc(`Could not turn this picture: ${e}`)}</div>`);
+      }
+    });
 }
 
 function scrollRowIntoView(name) {
@@ -1381,6 +1447,8 @@ document.addEventListener("click", (e) => {
     if (hit?.dataset.action === "close-preview" && (hit.classList.contains("ql-close") || emptySpace)) closePreview();
     else if (hit?.dataset.action === "preview-prev") stepPreview(-1);
     else if (hit?.dataset.action === "preview-next") stepPreview(1);
+    else if (hit?.dataset.action === "preview-rotate-left") rotatePreview(false);
+    else if (hit?.dataset.action === "preview-rotate-right") rotatePreview(true);
     return;
   }
   // File list: click a row to select, Cmd/Ctrl-click to add, Shift-click for a range
@@ -1463,6 +1531,8 @@ document.addEventListener("keydown", (e) => {
     if (e.key === " " || e.key === "Escape") { e.preventDefault(); closePreview(); }
     else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); stepPreview(-1); }
     else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); stepPreview(1); }
+    else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "r" || e.key === "R")) { e.preventDefault(); if (!e.repeat) rotatePreview(true); }
+    else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "l" || e.key === "L")) { e.preventDefault(); if (!e.repeat) rotatePreview(false); }
     return;
   }
   if (e.key === "Enter" && S.modal === "film" && e.target.tagName === "INPUT") { e.preventDefault(); saveFilm(); return; }
