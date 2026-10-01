@@ -1,4 +1,5 @@
 mod processor;
+mod reader;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -8,7 +9,9 @@ pub fn run() {
             processor::list_images,
             processor::reverse_order,
             processor::write_metadata,
-            processor::rename_files
+            processor::rename_files,
+            reader::read_folder,
+            reader::get_thumbnail
         ])
         .run(tauri::generate_context!())
         .expect("error while running FilmRoll Manager");

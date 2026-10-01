@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 
 const IMAGE_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "tif", "tiff"];
-const XMP_HEADER: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
+pub(crate) const XMP_HEADER: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
 const SECONDS_BETWEEN_FRAMES: i64 = 3;
 /// Only real film speeds count, so catalog numbers like "5219" are ignored
 const STANDARD_ISO: [u16; 29] = [
@@ -25,24 +25,24 @@ const STANDARD_ISO: [u16; 29] = [
 
 // ───────────────────────────── Helpers ─────────────────────────────
 
-fn file_name(path: &Path) -> String {
+pub(crate) fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default()
 }
 
-fn extension(path: &Path) -> String {
+pub(crate) fn extension(path: &Path) -> String {
     path.extension()
         .map(|e| e.to_string_lossy().into_owned())
         .unwrap_or_default()
 }
 
-fn is_jpeg(path: &Path) -> bool {
+pub(crate) fn is_jpeg(path: &Path) -> bool {
     matches!(extension(path).to_lowercase().as_str(), "jpg" | "jpeg")
 }
 
 /// All supported images in `folder`, hidden files excluded, natural sort order.
-fn collect_images(folder: &Path) -> Result<Vec<PathBuf>, String> {
+pub(crate) fn collect_images(folder: &Path) -> Result<Vec<PathBuf>, String> {
     let entries = fs::read_dir(folder).map_err(|e| format!("Could not open the folder: {e}"))?;
 
     let mut files: Vec<PathBuf> = entries
@@ -178,11 +178,11 @@ fn reverse_in(folder: &Path, progress: &dyn Fn(f64)) -> Result<(), String> {
 
 #[derive(Deserialize)]
 pub struct MetadataInput {
-    camera: String,
-    lens: String,
-    film: String,
-    date: String, // YYYY-MM-DD
-    time: String, // HH:MM
+    pub(crate) camera: String,
+    pub(crate) lens: String,
+    pub(crate) film: String,
+    pub(crate) date: String, // YYYY-MM-DD
+    pub(crate) time: String, // HH:MM
 }
 
 /// Step 3 – writes date/time (+3 s per frame), camera, lens and film.
@@ -199,7 +199,7 @@ pub async fn write_metadata(
     .map_err(|e| e.to_string())?
 }
 
-fn write_metadata_in(folder: &Path, meta: &MetadataInput, progress: &dyn Fn(f64)) -> Result<usize, String> {
+pub(crate) fn write_metadata_in(folder: &Path, meta: &MetadataInput, progress: &dyn Fn(f64)) -> Result<usize, String> {
     {
         let files = collect_images(folder)?;
         let start = NaiveDateTime::parse_from_str(

@@ -12,10 +12,10 @@
       {
         "label": "main",
         "title": "FilmRoll Manager",
-        "width": 780,
-        "height": 700,
-        "minWidth": 680,
-        "minHeight": 600,
+        "width": 1100,
+        "height": 720,
+        "minWidth": 900,
+        "minHeight": 560,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "dragDropEnabled": true
