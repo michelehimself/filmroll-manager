@@ -3,7 +3,7 @@
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
-const { open }   = window.__TAURI__.dialog;
+const { open, ask } = window.__TAURI__.dialog;
 const { getCurrentWebview } = window.__TAURI__.webview;
 
 // ── Platform: leave room for the macOS traffic lights ─────────────────────────
@@ -84,6 +84,7 @@ let S = {
   template: [],                      // [{ kind, value? }]
   store: { favorites: [], cameras: [], lenses: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
+  edits: {},             // unsaved changes typed into the list: file name → { camera?, lens?, film?, date? }
   selected: new Set(),   // file names chosen in the list; empty = tools work on all files
   anchor: null,          // last clicked file name (for shift-click ranges)
   filmQuery: "",
@@ -133,6 +134,7 @@ async function loadFolder(path) {
       S.folder = path;
       S.selected = new Set();
       S.anchor = null;
+      S.edits = {};
     } else {
       S.error = "This folder contains no JPG, PNG or TIFF images.";
     }
@@ -145,6 +147,7 @@ async function loadFolder(path) {
 }
 
 async function pickFolder() {
+  if (!(await confirmDiscard())) return;
   const selected = await open({ directory: true, multiple: false, title: "Choose the folder with your scans" });
   if (selected) loadFolder(selected);
 }
@@ -165,6 +168,76 @@ function showNotice(text) {
   box.innerHTML = `<div class="success-banner" role="status">${esc(text)}</div>`;
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => { const b = $("notice"); if (b) b.innerHTML = ""; }, 5000);
+}
+
+// ── Editing values in the list ────────────────────────────────────────────────
+const hasEdits = () => Object.keys(S.edits).length > 0;
+
+function onCellInput(input) {
+  const name = input.dataset.file, field = input.dataset.edit;
+  const file = S.files.find((f) => f.name === name);
+  if (!file) return;
+  if (input.value === file[field]) {
+    if (S.edits[name]) {
+      delete S.edits[name][field];
+      if (!Object.keys(S.edits[name]).length) delete S.edits[name];
+    }
+  } else {
+    (S.edits[name] ||= {})[field] = input.value;
+  }
+  input.classList.toggle("changed", input.value !== file[field]);
+  updateEditBar();
+}
+
+// Shows how many files have unsaved changes; the big tools wait until they are saved or discarded
+function updateEditBar() {
+  const n = Object.keys(S.edits).length;
+  const bar = $("editbar");
+  if (bar) {
+    bar.hidden = n === 0;
+    $("edit-count").textContent = `${n} file${n === 1 ? "" : "s"} changed`;
+    $("save-edits").disabled = S.busy;
+  }
+  document.querySelectorAll(".tool[data-tool]").forEach((b) => {
+    const tool = TOOLS.find((t) => t.id === b.dataset.tool);
+    b.disabled = !(tool?.ready && S.folder) || n > 0;
+  });
+  const note = $("sidebar-note");
+  if (note) note.hidden = n === 0;
+}
+
+async function saveEdits() {
+  if (!hasEdits() || S.busy) return;
+  const edits = Object.entries(S.edits).map(([name, fields]) => ({ name, ...fields }));
+  S.busy = true; S.error = null;
+  updateEditBar(); updateQuickTools();
+  try {
+    await invoke("write_edits", { folder: S.folder, edits });
+    S.edits = {};
+    S.busy = false;
+    await refreshFolder({ keepThumbnails: true });
+    showNotice(`Changes saved to ${edits.length} file${edits.length === 1 ? "" : "s"}.`);
+  } catch (e) {
+    S.busy = false;
+    S.error = String(e);
+    render();   // the typed values stay in the list
+  }
+}
+
+function discardEdits() {
+  S.edits = {};
+  render();
+}
+
+// Before leaving the current folder: ask if unsaved changes may be thrown away
+async function confirmDiscard() {
+  if (!hasEdits()) return true;
+  try {
+    return await ask("You have unsaved changes in the file list. Discard them?",
+      { title: "Unsaved changes", kind: "warning", okLabel: "Discard", cancelLabel: "Cancel" });
+  } catch {
+    return false;
+  }
 }
 
 // ── Selecting files in the list ───────────────────────────────────────────────
@@ -303,6 +376,7 @@ function render() {
     if (list) list.scrollTop = scroll;
     observeThumbnails();
     updateSelectionUI();
+    updateEditBar();
   }
   renderModal();
 }
@@ -317,12 +391,12 @@ function viewManager() {
 
 function viewSidebar() {
   const tiles = TOOLS.map((t) => `
-    <button class="tool" data-tool="${t.id}" ${t.ready && S.folder ? "" : "disabled"}>
+    <button class="tool" data-tool="${t.id}" ${t.ready && S.folder && !hasEdits() ? "" : "disabled"}>
       <span class="tool-icon">${t.icon}</span>
       <span class="tool-text"><div class="tool-title">${t.title}</div><div class="tool-desc">${t.desc}</div></span>
       ${t.soon ? `<span class="tool-badge">Soon</span>` : ""}
     </button>`).join("");
-  return `<aside class="sidebar"><div class="sidebar-head">Tools</div>${tiles}</aside>`;
+  return `<aside class="sidebar"><div class="sidebar-head">Tools</div>${tiles}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p></aside>`;
 }
 
 function viewDropArea() {
@@ -343,6 +417,13 @@ function viewDropArea() {
     </div>`;
 }
 
+// Every value in the list can be typed over; changes are kept until "Save Changes"
+const cellValue = (f, field) => S.edits[f.name]?.[field] ?? f[field];
+function editCell(f, field) {
+  const changed = field in (S.edits[f.name] || {});
+  return `<div class="cell editable"><input class="cell-input${changed ? " changed" : ""}" data-edit="${field}" data-file="${esc(f.name)}" value="${esc(cellValue(f, field))}"${field === "date" ? ' placeholder="YYYY-MM-DD HH:MM:SS"' : ""} autocomplete="off" spellcheck="false" aria-label="${field} of ${esc(f.name)}"></div>`;
+}
+
 function viewExplorer() {
   if (S.loading) {
     return `<div class="loading-view"><p class="loading-msg">Reading folder…</p><p class="loading-sub">Looking at the files and their metadata</p></div>`;
@@ -354,16 +435,18 @@ function viewExplorer() {
       <div class="check"><input type="checkbox" data-check="${esc(f.name)}" ${S.selected.has(f.name) ? "checked" : ""} aria-label="Select ${esc(f.name)}"></div>
       <div class="thumb">${IC.image}<img data-path="${esc(f.path)}" alt=""></div>
       <div class="cell name" title="${esc(f.name)}">${esc(f.name)}</div>
-      <div class="cell" title="${esc(f.camera)}">${esc(f.camera)}</div>
-      <div class="cell" title="${esc(f.lens)}">${esc(f.lens)}</div>
-      <div class="cell" title="${esc(f.film)}">${esc(f.film)}</div>
-      <div class="cell date">${esc(f.date)}</div>
+      ${editCell(f, "camera")}${editCell(f, "lens")}${editCell(f, "film")}${editCell(f, "date")}
     </div>`).join("");
   return `
     <section class="explorer" id="dropzone">
       <div class="toolbar">
         <div class="toolbar-folder">${IC.folder}<span class="name" title="${esc(S.folder)}">${esc(folderName(S.folder))}</span><span class="count" id="sel-count">${selectionText()}</span></div>
         <div class="toolbar-spacer"></div>
+        <div class="editbar" id="editbar" hidden>
+          <span class="editbar-text" id="edit-count"></span>
+          <button class="btn btn-ghost" data-action="discard-edits">Discard</button>
+          <button class="btn btn-primary" id="save-edits" data-action="save-edits">Save Changes</button>
+        </div>
         <div class="quick" role="group" aria-label="Quick tools">
           <span class="quick-label">Rotate</span>
           <button class="btn btn-ghost square" data-rotate="ccw" title="Rotate counterclockwise" aria-label="Rotate selected files counterclockwise" disabled>${IC.rotateCcw}</button>
@@ -868,7 +951,7 @@ getCurrentWebview().onDragDropEvent((event) => {
   if (type === "drop") {
     zone?.classList.remove("dragging");
     const path = event.payload.paths?.[0];
-    if (path) loadFolder(path);
+    if (path) confirmDiscard().then((ok) => { if (ok) loadFolder(path); });
   }
 });
 
@@ -888,6 +971,8 @@ document.addEventListener("click", (e) => {
   if (t.dataset.gearRemove) removeGear(t.dataset.gearRemove, t.dataset.name);
   if (t.dataset.action === "toggle-fav-filter") { S.filmFavoritesOnly = !S.filmFavoritesOnly; render(); }
   if (t.dataset.action === "pick-folder") pickFolder();
+  if (t.dataset.action === "save-edits") saveEdits();
+  if (t.dataset.action === "discard-edits") discardEdits();
   if (t.dataset.action === "close-modal") closeModal();
   if (t.dataset.action === "confirm-modal") confirmModal();
   if (t.dataset.insert) insertAtCursor(makeChip(t.dataset.insert));
@@ -905,6 +990,7 @@ document.addEventListener("change", (e) => {
 
 // Text fields write straight into the state (data-model="group.key")
 document.addEventListener("input", (e) => {
+  if (e.target.dataset?.edit) { onCellInput(e.target); return; }
   if (e.target.id === "film-search") { S.filmQuery = e.target.value; renderFilmList(); return; }
   const model = e.target.dataset?.model;
   if (!model) return;
@@ -926,6 +1012,21 @@ document.addEventListener("mousedown", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
+  const cellField = e.target.dataset?.edit;
+  if (cellField && ["Enter", "ArrowDown", "ArrowUp"].includes(e.key)) {
+    e.preventDefault();   // moves to the same column in the next or previous row
+    const cells = [...document.querySelectorAll(`[data-edit="${cellField}"]`)];
+    const next = cells[cells.indexOf(e.target) + (e.key === "ArrowUp" ? -1 : 1)];
+    if (next) { next.focus(); next.select(); }
+    return;
+  }
+  if (cellField && e.key === "Escape") {   // put the original value back
+    e.preventDefault();
+    const file = S.files.find((f) => f.name === e.target.dataset.file);
+    e.target.value = file ? file[cellField] : "";
+    onCellInput(e.target);
+    return;
+  }
   const rename = e.target.dataset?.gearRename, adding = e.target.dataset?.gearInput;
   if (rename && e.key === "Enter")  { e.preventDefault(); finishRename(e.target, true);  return; }
   if (rename && e.key === "Escape") { e.preventDefault(); finishRename(e.target, false); return; }

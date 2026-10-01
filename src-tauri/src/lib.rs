@@ -13,6 +13,7 @@ pub fn run() {
             processor::write_metadata,
             processor::rename_files,
             processor::rotate_images,
+            processor::write_edits,
             reader::read_folder,
             reader::get_thumbnail,
             store::load_store,

@@ -2,7 +2,7 @@
 //! Every command works on the image files of one folder, sorted naturally
 //! (scan_2 before scan_10), exactly the order the frontend shows.
 
-use chrono::{NaiveDateTime, TimeDelta};
+use chrono::{NaiveDate, NaiveDateTime, TimeDelta};
 use img_parts::jpeg::{markers, Jpeg, JpegSegment};
 use img_parts::Bytes;
 use little_exif::exif_tag::ExifTag;
@@ -255,47 +255,59 @@ fn write_file_metadata(path: &Path, timestamp: &str, meta: &MetadataInput) -> Re
     // block (lens, focal length, ISO …) unless these required fields exist.
     add_required_exif_fields(&mut exif, path);
 
-    exif.set_tag(ExifTag::DateTimeOriginal(timestamp.to_string()));
-    exif.set_tag(ExifTag::CreateDate(timestamp.to_string()));
-    exif.set_tag(ExifTag::ModifyDate(timestamp.to_string()));
+    set_dates(&mut exif, timestamp);
 
     if !camera.is_empty() {
         exif.set_tag(ExifTag::Model(camera.to_string()));
     }
-
     if !lens.is_empty() {
-        exif.set_tag(ExifTag::LensModel(lens.to_string()));
-        let specs = parse_lens(lens);
-        if let (Some(min), Some(max)) = (specs.focal_min, specs.focal_max) {
-            // Focal length of the shot is only certain for prime lenses
-            if min == max {
-                exif.set_tag(ExifTag::FocalLength(vec![rational(min)]));
-            }
-            let f = specs.aperture.map(rational).unwrap_or(uR64 { nominator: 0, denominator: 0 });
-            exif.set_tag(ExifTag::LensInfo(vec![rational(min), rational(max), f.clone(), f]));
-        }
-        if let Some(f_number) = specs.aperture {
-            // EXIF stores the widest aperture as APEX value: 2 · log2(f-number)
-            exif.set_tag(ExifTag::MaxApertureValue(vec![rational(2.0 * f_number.log2())]));
-        }
+        apply_lens(&mut exif, lens);
     }
-
     if !film.is_empty() {
-        if let Some(iso) = parse_film_iso(film) {
-            exif.set_tag(ExifTag::ISO(vec![iso]));
-        }
-        // PNG/TIFF: no XMP writer here, so the film goes into the EXIF description
-        if !is_jpeg(path) {
-            exif.set_tag(ExifTag::ImageDescription(film.to_string()));
-        }
+        apply_film(&mut exif, path, film);
     }
 
     exif.write_to_file(path).map_err(|e| e.to_string())?;
 
     if !film.is_empty() && is_jpeg(path) {
-        write_xmp_film_label(path, film)?;
+        write_xmp_film_label(path, Some(film))?;
     }
     Ok(())
+}
+
+fn set_dates(exif: &mut Metadata, timestamp: &str) {
+    exif.set_tag(ExifTag::DateTimeOriginal(timestamp.to_string()));
+    exif.set_tag(ExifTag::CreateDate(timestamp.to_string()));
+    exif.set_tag(ExifTag::ModifyDate(timestamp.to_string()));
+}
+
+/// Lens name plus whatever can be read from it: focal length and widest aperture.
+fn apply_lens(exif: &mut Metadata, lens: &str) {
+    exif.set_tag(ExifTag::LensModel(lens.to_string()));
+    let specs = parse_lens(lens);
+    if let (Some(min), Some(max)) = (specs.focal_min, specs.focal_max) {
+        // Focal length of the shot is only certain for prime lenses
+        if min == max {
+            exif.set_tag(ExifTag::FocalLength(vec![rational(min)]));
+        }
+        let f = specs.aperture.map(rational).unwrap_or(uR64 { nominator: 0, denominator: 0 });
+        exif.set_tag(ExifTag::LensInfo(vec![rational(min), rational(max), f.clone(), f]));
+    }
+    if let Some(f_number) = specs.aperture {
+        // EXIF stores the widest aperture as APEX value: 2 · log2(f-number)
+        exif.set_tag(ExifTag::MaxApertureValue(vec![rational(2.0 * f_number.log2())]));
+    }
+}
+
+/// Film speed from the name; PNG/TIFF keep the film name in the EXIF description
+/// (JPEG gets an XMP label instead, written separately).
+fn apply_film(exif: &mut Metadata, path: &Path, film: &str) {
+    if let Some(iso) = parse_film_iso(film) {
+        exif.set_tag(ExifTag::ISO(vec![iso]));
+    }
+    if !is_jpeg(path) {
+        exif.set_tag(ExifTag::ImageDescription(film.to_string()));
+    }
 }
 
 fn rational(value: f64) -> uR64 {
@@ -410,7 +422,8 @@ fn parse_film_iso(film: &str) -> Option<u16> {
 
 /// Stores the film stock as xmp:Label inside the JPEG.
 /// Only the metadata segment changes – image data stays byte-identical.
-fn write_xmp_film_label(path: &Path, film: &str) -> Result<(), String> {
+/// `None` removes the label.
+fn write_xmp_film_label(path: &Path, film: Option<&str>) -> Result<(), String> {
     let data = fs::read(path).map_err(|e| e.to_string())?;
     let mut jpeg = Jpeg::from_bytes(Bytes::from(data)).map_err(|e| e.to_string())?;
 
@@ -419,22 +432,24 @@ fn write_xmp_film_label(path: &Path, film: &str) -> Result<(), String> {
         !(segment.marker() == markers::APP1 && segment.contents().starts_with(XMP_HEADER))
     });
 
-    let packet = format!(
-        r#"<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:Label="{}"/></rdf:RDF></x:xmpmeta><?xpacket end="w"?>"#,
-        xml_escape(film)
-    );
-    let mut contents = XMP_HEADER.to_vec();
-    contents.extend_from_slice(packet.as_bytes());
-    let segment = JpegSegment::new_with_contents(markers::APP1, Bytes::from(contents));
+    if let Some(film) = film {
+        let packet = format!(
+            r#"<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:Label="{}"/></rdf:RDF></x:xmpmeta><?xpacket end="w"?>"#,
+            xml_escape(film)
+        );
+        let mut contents = XMP_HEADER.to_vec();
+        contents.extend_from_slice(packet.as_bytes());
+        let segment = JpegSegment::new_with_contents(markers::APP1, Bytes::from(contents));
 
-    // Place it right after the EXIF segment
-    let position = jpeg
-        .segments()
-        .iter()
-        .position(|s| s.marker() == markers::APP1)
-        .map(|i| i + 1)
-        .unwrap_or(0);
-    jpeg.segments_mut().insert(position, segment);
+        // Place it right after the EXIF segment
+        let position = jpeg
+            .segments()
+            .iter()
+            .position(|s| s.marker() == markers::APP1)
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        jpeg.segments_mut().insert(position, segment);
+    }
 
     let mut output = Vec::new();
     jpeg.encoder().write_to(&mut output).map_err(|e| e.to_string())?;
@@ -500,6 +515,119 @@ fn rename_in(
     }
 }
 
+
+// ───────────────────────────── Edits made in the file list ─────────────────────────────
+
+/// Changes to one file. A field that is missing stays as it is,
+/// an empty text removes the value from the file.
+#[derive(Deserialize)]
+pub struct FileEdit {
+    name: String,
+    camera: Option<String>,
+    lens: Option<String>,
+    film: Option<String>,
+    date: Option<String>, // "2026-05-01 21:00:03", time optional
+}
+
+/// `Ok(None)` = empty text = remove the date; `Ok(Some(..))` = EXIF notation.
+fn parse_edit_date(text: &str) -> Result<Option<String>, String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    let parsed = NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M"))
+        .or_else(|_| {
+            NaiveDate::parse_from_str(text, "%Y-%m-%d").map(|d| d.and_hms_opt(0, 0, 0).unwrap_or_default())
+        })
+        .map_err(|_| format!("\"{text}\" is not a valid date. Please use the form 2026-05-01 21:00:03."))?;
+    Ok(Some(parsed.format("%Y:%m:%d %H:%M:%S").to_string()))
+}
+
+/// Saves the changes typed into the file list.
+#[tauri::command]
+pub async fn write_edits(app: AppHandle, folder: String, edits: Vec<FileEdit>) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        write_edits_in(Path::new(&folder), &edits, &|v| emit_progress(&app, v))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn write_edits_in(folder: &Path, edits: &[FileEdit], progress: &dyn Fn(f64)) -> Result<usize, String> {
+    let names: Vec<String> = edits.iter().map(|e| e.name.clone()).collect();
+    let paths = select_images(folder, Some(&names))?;
+
+    // Check every date first, so nothing is written if one of them is wrong
+    let mut dates = Vec::with_capacity(edits.len());
+    for edit in edits {
+        dates.push(match &edit.date {
+            Some(text) => Some(parse_edit_date(text).map_err(|e| format!("\"{}\": {e}", edit.name))?),
+            None => None,
+        });
+    }
+
+    let total = edits.len().max(1) as f64;
+    for (i, (edit, date)) in edits.iter().zip(dates).enumerate() {
+        let path = paths
+            .iter()
+            .find(|p| file_name(p) == edit.name)
+            .ok_or_else(|| format!("\"{}\" is no longer in the folder.", edit.name))?;
+        write_one_edit(path, edit, date).map_err(|e| format!("\"{}\": {e}", edit.name))?;
+        progress((i + 1) as f64 / total);
+    }
+    Ok(edits.len())
+}
+
+fn write_one_edit(path: &Path, edit: &FileEdit, date: Option<Option<String>>) -> Result<(), String> {
+    let mut exif = Metadata::new_from_path(path).unwrap_or_else(|_| Metadata::new());
+    add_required_exif_fields(&mut exif, path);
+
+    if let Some(camera) = edit.camera.as_deref().map(str::trim) {
+        if camera.is_empty() {
+            exif.remove_tag(ExifTag::Model(String::new()));
+        } else {
+            exif.set_tag(ExifTag::Model(camera.to_string()));
+        }
+    }
+
+    if let Some(lens) = edit.lens.as_deref().map(str::trim) {
+        if lens.is_empty() {
+            exif.remove_tag(ExifTag::LensModel(String::new()));
+            exif.remove_tag(ExifTag::FocalLength(vec![]));
+            exif.remove_tag(ExifTag::LensInfo(vec![]));
+            exif.remove_tag(ExifTag::MaxApertureValue(vec![]));
+        } else {
+            apply_lens(&mut exif, lens);
+        }
+    }
+
+    match date {
+        Some(Some(timestamp)) => set_dates(&mut exif, &timestamp),
+        Some(None) => {
+            exif.remove_tag(ExifTag::DateTimeOriginal(String::new()));
+            exif.remove_tag(ExifTag::CreateDate(String::new()));
+            exif.remove_tag(ExifTag::ModifyDate(String::new()));
+        }
+        None => {}
+    }
+
+    let film = edit.film.as_deref().map(str::trim);
+    match film {
+        Some("") if !is_jpeg(path) => { exif.remove_tag(ExifTag::ImageDescription(String::new())); }
+        Some(film) if !film.is_empty() => apply_film(&mut exif, path, film),
+        _ => {}
+    }
+
+    exif.write_to_file(path).map_err(|e| e.to_string())?;
+
+    if is_jpeg(path) {
+        if let Some(film) = film {
+            write_xmp_film_label(path, if film.is_empty() { None } else { Some(film) })?;
+        }
+    }
+    Ok(())
+}
 
 // ───────────────────────────── Rotate ─────────────────────────────
 
@@ -568,20 +696,18 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("filmroll_test_{name}"));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        // Smallest valid JPEG (1×1 px), followed by a marker comment with the frame id
-        let base: &[u8] = &[
-            0xFF,0xD8,0xFF,0xDB,0x00,0x43,0x00,0x08,0x06,0x06,0x07,0x06,0x05,0x08,0x07,0x07,0x07,0x09,0x09,0x08,0x0A,0x0C,0x14,0x0D,0x0C,0x0B,0x0B,0x0C,0x19,0x12,0x13,0x0F,0x14,0x1D,0x1A,0x1F,0x1E,0x1D,0x1A,0x1C,0x1C,0x20,0x24,0x2E,0x27,0x20,0x22,0x2C,0x23,0x1C,0x1C,0x28,0x37,0x29,0x2C,0x30,0x31,0x34,0x34,0x34,0x1F,0x27,0x39,0x3D,0x38,0x32,0x3C,0x2E,0x33,0x34,0x32,
-            0xFF,0xC0,0x00,0x0B,0x08,0x00,0x01,0x00,0x01,0x01,0x01,0x11,0x00,
-            0xFF,0xC4,0x00,0x14,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x08,
-            0xFF,0xC4,0x00,0x14,0x10,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-            0xFF,0xDA,0x00,0x08,0x01,0x01,0x00,0x00,0x3F,0x00,0x37,0xFF,0xD9,
-        ];
+        // A small but valid JPEG, plus a comment segment that carries the frame id
+        let mut base = Vec::new();
+        image::RgbImage::from_pixel(8, 8, image::Rgb([200, 120, 60]))
+            .write_to(&mut std::io::Cursor::new(&mut base), image::ImageFormat::Jpeg)
+            .unwrap();
+        let after_app0 = 4 + u16::from_be_bytes([base[4], base[5]]) as usize;   // SOI + JFIF segment
         for i in 1..=count {
-            let mut bytes = base[..2].to_vec();
+            let mut bytes = base[..after_app0].to_vec();
             let tag = format!("frame{i:03}");
             bytes.extend_from_slice(&[0xFF, 0xFE, 0x00, (tag.len() + 2) as u8]);
             bytes.extend_from_slice(tag.as_bytes());
-            bytes.extend_from_slice(&base[2..]);
+            bytes.extend_from_slice(&base[after_app0..]);
             fs::write(dir.join(format!("scan_{i}.jpg")), bytes).unwrap();
         }
         dir
@@ -828,5 +954,65 @@ mod tests {
         let exif = Metadata::new_from_path(&dir.join("scan_2.jpg")).unwrap();
         assert_eq!(exif.get_tag(&ExifTag::Model(String::new())).next().unwrap(), &ExifTag::Model("Canon AE-1".into()));
         assert!(after.len().abs_diff(before.len()) < 64);
+    }
+
+    fn edit(name: &str, camera: Option<&str>, lens: Option<&str>, film: Option<&str>, date: Option<&str>) -> FileEdit {
+        FileEdit {
+            name: name.into(),
+            camera: camera.map(String::from), lens: lens.map(String::from),
+            film: film.map(String::from), date: date.map(String::from),
+        }
+    }
+
+    #[test]
+    fn edits_are_written_and_can_be_cleared() {
+        let dir = roll("edits", 3);
+        let set = [
+            edit("scan_2.jpg", Some("Pentax 17"), Some("HD Pentax 25mm F/3.5"), Some("Ilford HP5 Plus 400"), Some("2026-05-01 21:00:03")),
+            edit("scan_3.jpg", None, None, None, Some("2026-05-02")),
+        ];
+        assert_eq!(write_edits_in(&dir, &set, &|_| {}).unwrap(), 2);
+
+        let read = |n: &str, tag: ExifTag| Metadata::new_from_path(&dir.join(n)).ok().and_then(|m| m.get_tag(&tag).next().cloned());
+        assert_eq!(read("scan_2.jpg", ExifTag::Model(String::new())), Some(ExifTag::Model("Pentax 17".into())));
+        assert_eq!(read("scan_2.jpg", ExifTag::DateTimeOriginal(String::new())), Some(ExifTag::DateTimeOriginal("2026:05:01 21:00:03".into())));
+        assert_eq!(read("scan_2.jpg", ExifTag::ISO(vec![])), Some(ExifTag::ISO(vec![400])));
+        assert_eq!(read("scan_3.jpg", ExifTag::DateTimeOriginal(String::new())), Some(ExifTag::DateTimeOriginal("2026:05:02 00:00:00".into())));
+        assert_eq!(read("scan_3.jpg", ExifTag::Model(String::new())), None);   // untouched fields stay empty
+        assert!(String::from_utf8_lossy(&fs::read(dir.join("scan_2.jpg")).unwrap()).contains(r#"xmp:Label="Ilford HP5 Plus 400""#));
+        assert_eq!(read("scan_1.jpg", ExifTag::Model(String::new())), None);   // not edited
+
+        // An empty text removes the value again
+        let clear = [edit("scan_2.jpg", Some(""), Some(""), Some(""), Some(""))];
+        write_edits_in(&dir, &clear, &|_| {}).unwrap();
+        assert_eq!(read("scan_2.jpg", ExifTag::Model(String::new())), None);
+        assert_eq!(read("scan_2.jpg", ExifTag::LensModel(String::new())), None);
+        assert_eq!(read("scan_2.jpg", ExifTag::FocalLength(vec![])), None);
+        assert_eq!(read("scan_2.jpg", ExifTag::DateTimeOriginal(String::new())), None);
+        assert!(!String::from_utf8_lossy(&fs::read(dir.join("scan_2.jpg")).unwrap()).contains("xmp:Label"));
+        assert_eq!(frame_id(&dir.join("scan_2.jpg")), "frame002");
+    }
+
+    #[test]
+    fn one_wrong_date_stops_everything() {
+        let dir = roll("edits_bad", 2);
+        let set = [
+            edit("scan_1.jpg", Some("Canon AE-1"), None, None, None),
+            edit("scan_2.jpg", None, None, None, Some("yesterday")),
+        ];
+        let err = write_edits_in(&dir, &set, &|_| {}).unwrap_err();
+        assert!(err.contains("scan_2.jpg") && err.contains("not a valid date"));
+        let model = Metadata::new_from_path(&dir.join("scan_1.jpg")).ok()
+            .and_then(|m| m.get_tag(&ExifTag::Model(String::new())).next().cloned());
+        assert_eq!(model, None);   // the valid edit was not written either
+    }
+
+    #[test]
+    fn edit_dates_are_understood() {
+        assert_eq!(parse_edit_date("2026-05-01 21:00:03").unwrap(), Some("2026:05:01 21:00:03".into()));
+        assert_eq!(parse_edit_date("2026-05-01 21:00").unwrap(), Some("2026:05:01 21:00:00".into()));
+        assert_eq!(parse_edit_date("2026-05-01").unwrap(), Some("2026:05:01 00:00:00".into()));
+        assert_eq!(parse_edit_date("  ").unwrap(), None);
+        assert!(parse_edit_date("2026-13-40").is_err());
     }
 }
