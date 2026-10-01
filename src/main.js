@@ -845,7 +845,7 @@ function bodySheet() {
   const select = (id, label, options) => `
     <div class="field-wrap">
       <label class="field-label" for="f-s-${id}">${label}</label>
-      <div class="field-row"><select id="f-s-${id}" data-model="sheet.${id}">
+      <div class="field-row select"><select id="f-s-${id}" data-model="sheet.${id}">
         ${options.map(([value, name]) => `<option value="${value}"${S.sheet[id] === value ? " selected" : ""}>${name}</option>`).join("")}
       </select></div>
     </div>`;

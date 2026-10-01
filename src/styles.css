@@ -381,8 +381,15 @@ button { font-family: inherit; }
 .sheet-cell img.loaded { opacity: 1; }
 .sheet-label { position: absolute; text-align: center; color: var(--paper-ink-2); white-space: nowrap; overflow: hidden; }
 .field-row select {
-  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
-  font: inherit; font-size: 14px; color: var(--text); cursor: pointer;
+  flex: 1; min-width: 0; height: 100%; margin: 0; padding: 0 22px 0 0; border: none; outline: none; border-radius: 0;
+  background: transparent; font: inherit; font-size: 14px; color: var(--text); cursor: pointer;
+  -webkit-appearance: none; appearance: none;   /* no system look, so the text starts exactly where it does in the input fields */
+}
+.field-row.select { position: relative; }
+.field-row.select::after {   /* drawn arrow, in the colour of the theme */
+  content: ""; position: absolute; right: 14px; top: 50%; width: 6px; height: 6px;
+  border-right: 1.5px solid var(--text-3); border-bottom: 1.5px solid var(--text-3);
+  transform: translateY(-70%) rotate(45deg); pointer-events: none;
 }
 .check-line { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .check-line input { width: 15px; height: 15px; accent-color: var(--accent); }
