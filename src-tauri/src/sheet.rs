@@ -28,6 +28,7 @@ const LINE_TO_NEXT: f64 = 5.0;
 const LAST_BASELINE_TO_RULE: f64 = 4.0;
 const RULE_TO_GRID: f64 = 4.0;
 /// Where the grid starts at the earliest when there is a header (title and info line)
+#[cfg(test)]
 const GRID_Y_WITH_HEADER: f64 = 32.0;
 /// Picture size inside the PDF: sharp enough for print, small enough to stay a light file
 const PDF_PICTURE_PX: u32 = 640;
