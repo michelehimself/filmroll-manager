@@ -23,6 +23,8 @@
   --green-bg:#E6F7EA;  --green-fg:#248C45;  --green-bd:#A8DCBA;
   --orange-bg:#FFF0E8; --orange-fg:#C05020; --orange-bd:#F0C4A8;
 
+  --sidebar-w:     232px;
+
   color-scheme: light dark;
 }
 
@@ -117,7 +119,7 @@ button { font-family: inherit; }
 .manager { flex: 1; min-width: 0; display: flex; }
 
 .sidebar {
-  width: 232px; flex-shrink: 0; overflow-y: auto;
+  width: var(--sidebar-w); flex-shrink: 0; overflow-y: auto;
   background: var(--bg-subtle); border-right: 1px solid var(--border);
   padding: 18px 14px; display: flex; flex-direction: column; gap: 8px;
 }
@@ -346,10 +348,14 @@ button { font-family: inherit; }
 .loading-sub { font-variant-numeric: tabular-nums; }
 
 #snackbar { position: fixed; left: 20px; right: 20px; bottom: 18px; z-index: 20; pointer-events: none; }
+/* In the Manager the message sits over the file list only, not over the sidebar */
+#snackbar.with-sidebar { left: calc(var(--sidebar-w) + 20px); }
 .snackbar {
   pointer-events: auto; display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 8px 10px 14px; border-radius: 8px; font-size: 12.5px;
-  background: var(--green-bg); color: var(--green-fg); border: 1px solid var(--green-bd);
+  /* the green tint sits on a solid surface, so nothing shines through in dark mode */
+  background-color: var(--surface); background-image: linear-gradient(var(--green-bg), var(--green-bg));
+  color: var(--green-fg); border: 1px solid var(--green-bd);
   box-shadow: 0 6px 20px rgba(0,0,0,.14);
   animation: snack-in .2s ease-out;
 }

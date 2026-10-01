@@ -382,6 +382,7 @@ function render() {
     `<button class="tab${t.id === S.tab ? " active" : ""}" role="tab" aria-selected="${t.id === S.tab}" data-tab="${t.id}">${t.icon}${t.label}</button>`
   ).join("");
 
+  $("snackbar").classList.toggle("with-sidebar", S.tab === "manager");
   const view = $("view");
   const scroll = document.querySelector(".filelist")?.scrollTop ?? 0;
   if (S.tab === "manager") view.innerHTML = viewManager();
