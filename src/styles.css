@@ -25,7 +25,7 @@
 
   --sidebar-w:     232px;
   /* A printed page is always white, in dark mode too */
-  --paper:#FFFFFF; --paper-ink:#1C1C1E; --paper-ink-2:#59595D; --paper-cell:#EDEDED; --paper-rule:#CCCCCC;
+  --paper:#FFFFFF; --paper-ink:#1C1C1E; --paper-ink-2:#59595D; --paper-cell:#EDEDED; --paper-rule:#CCCCCC; --paper-strip:#1A1A1A; --paper-window:#0A0A0A; --paper-edge:#EDAE40;
 
   color-scheme: light dark;
 }
@@ -379,6 +379,12 @@ button { font-family: inherit; }
 .sheet-cell { position: absolute; background: var(--paper-cell); }
 .sheet-cell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .2s; }
 .sheet-cell img.loaded { opacity: 1; }
+.sheet-strips { position: absolute; left: 0; top: 0; }
+.strip-bg { fill: var(--paper-strip); }
+.strip-hole { fill: var(--paper); }
+.strip-edge { fill: var(--paper-edge); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+.sheet-cell.film { background: var(--paper-window); }
+.sheet-controls[data-style="strip"] .check-line { display: none; }
 .sheet-label { position: absolute; text-align: center; color: var(--paper-ink-2); white-space: nowrap; overflow: hidden; }
 .field-row select {
   flex: 1; min-width: 0; height: 100%; margin: 0; padding: 0 22px 0 0; border: none; outline: none; border-radius: 0;

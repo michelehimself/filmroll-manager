@@ -687,6 +687,20 @@ mod tests {
     }
 
     #[test]
+    fn layout_is_sent_to_the_preview_in_camel_case() {
+        let json = serde_json::to_value(layout(&[1.5; 36], &strip_options())).unwrap();
+        for key in ["pageW", "boxW", "stripSpec", "strips", "cells", "scanText", "titleBaseline"] {
+            assert!(json.get(key).is_some(), "missing {key}");
+        }
+        assert_eq!(json["style"], "strip");
+        assert_eq!(json["stripSpec"]["perforated"], true);
+        // Kept for a look at the preview in the browser
+        let dir = std::env::temp_dir().join("filmroll_sheet_36");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("layout_strip.json"), json.to_string()).unwrap();
+    }
+
+    #[test]
     fn no_header_means_more_room() {
         let mut o = options();
         o.title = " ".into();
