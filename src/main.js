@@ -24,6 +24,9 @@ const IC = {
   cameraBig: svg(40, 1.3, CAMERA),
   film:      svg(15, 1.6, FILM),
   filmBig:   svg(40, 1.3, FILM),
+  plus:      svg(15, 1.8, `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`),
+  pencil:    svg(15, 1.6, `<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>`),
+  trash:     svg(15, 1.6, `<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>`),
   search:    svg(15, 1.6, `<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>`),
   star:      svg(16, 1.6, `<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>`),
   calendar:  svg(15, 1.6, `<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>`),
@@ -77,7 +80,7 @@ let S = {
   meta: { camera: "", lens: "", film: "", date: todayString(), time: "12:00" },
   rename: { date: "", film: "" },   // values behind the Date and Film Name tags
   template: [],                      // [{ kind, value? }]
-  store: { favorites: [] },          // the user's own data, saved by Rust in library.json
+  store: { favorites: [], cameras: [], lenses: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
   filmQuery: "",
   filmFavoritesOnly: false,
@@ -207,7 +210,7 @@ function render() {
   const scroll = document.querySelector(".filelist")?.scrollTop ?? 0;
   if (S.tab === "manager") view.innerHTML = viewManager();
   if (S.tab === "films")   { view.innerHTML = viewFilms(); renderFilmList(); }
-  if (S.tab === "gear")    view.innerHTML = viewPlaceholder(IC.cameraBig, "Gear", "Your cameras and lenses will live here.");
+  if (S.tab === "gear")    { view.innerHTML = viewGear(); renderGearLists(); }
   if (S.tab === "manager") {
     const list = document.querySelector(".filelist");
     if (list) list.scrollTop = scroll;
@@ -294,18 +297,19 @@ async function saveStore() {
   } catch (e) {
     S.storeError = `Your favorites could not be saved: ${e}`;
   }
-  const box = $("film-error");
+  const box = $("store-error");
   if (box) box.innerHTML = S.storeError ? `<div class="error-banner" role="alert">${esc(S.storeError)}</div>` : "";
 }
 
 async function loadStore() {
   try {
     const data = await invoke("load_store");
-    S.store = { ...data, favorites: Array.isArray(data.favorites) ? data.favorites : [] };
+    const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string") : []);
+    S.store = { ...data, favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses) };
   } catch (e) {
     S.storeError = `Your saved favorites could not be loaded: ${e}`;
   }
-  if (S.tab === "films") render();
+  if (S.tab === "films" || S.tab === "gear") render();
 }
 
 function viewFilms() {
@@ -324,7 +328,7 @@ function viewFilms() {
           <button class="btn btn-ghost${S.filmFavoritesOnly ? " on" : ""}" data-action="toggle-fav-filter" aria-pressed="${S.filmFavoritesOnly}">Favorites only</button>
         </div>
       </div>
-      <div id="film-error">${S.storeError ? `<div class="error-banner" role="alert">${esc(S.storeError)}</div>` : ""}</div>
+      <div id="store-error">${S.storeError ? `<div class="error-banner" role="alert">${esc(S.storeError)}</div>` : ""}</div>
       <div class="page-scroll" id="film-list"></div>
     </div>`;
 }
@@ -366,13 +370,108 @@ function toggleFavorite(name) {
   saveStore();
 }
 
+// ── Gear tab ──────────────────────────────────────────────────────────────────
+const GEAR = {
+  cameras: { title: "Cameras", icon: IC.camera, placeholder: "e.g. Canon AE-1, Contax T2", empty: "No cameras yet.", hint: "" },
+  lenses:  { title: "Lenses",  icon: IC.aperture, placeholder: "e.g. Canon FD 50mm f/1.4", empty: "No lenses yet.",
+             hint: "Include the focal length and the widest aperture in the name, like <strong>50mm f/1.4</strong>. They are written into the image files, too." },
+};
+let gearEdit = null;   // { kind, name } while a row is being renamed
+
+const sortedGear = (kind) => [...S.store[kind]].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+const cleanName = (t) => t.trim().replace(/\s+/g, " ");
+const hasGear = (kind, name, except = null) =>
+  S.store[kind].some((n) => n !== except && n.toLowerCase() === name.toLowerCase());
+
+function viewGear() {
+  const col = (kind) => {
+    const g = GEAR[kind];
+    return `
+      <section class="gear-col">
+        <p class="gear-title">${g.title}</p>
+        <div class="gear-add">
+          <div class="field-row">
+            <span class="field-icon">${g.icon}</span>
+            <input id="gear-input-${kind}" data-gear-input="${kind}" type="text" placeholder="${g.placeholder}" autocomplete="off" spellcheck="false" aria-label="Add to ${g.title.toLowerCase()}">
+          </div>
+          <button class="btn btn-primary" data-action="gear-add" data-kind="${kind}">Add</button>
+        </div>
+        ${g.hint ? `<div class="hint-box">${g.hint}</div>` : ""}
+        <div class="gear-list" id="gear-${kind}"></div>
+      </section>`;
+  };
+  return `
+    <div class="page">
+      <div class="page-head">
+        <div>
+          <p class="step-heading">Gear</p>
+          <p class="step-sub">Enter your cameras and lenses once. They show up as suggestions in the Camera and Lens fields of Bulk Edit Meta Data.</p>
+        </div>
+      </div>
+      <div id="store-error">${S.storeError ? `<div class="error-banner" role="alert">${esc(S.storeError)}</div>` : ""}</div>
+      <div class="page-scroll"><div class="gear-grid">${col("cameras")}${col("lenses")}</div></div>
+    </div>`;
+}
+
+function renderGearLists() {
+  ["cameras", "lenses"].forEach((kind) => {
+    const box = $(`gear-${kind}`);
+    if (!box) return;
+    const names = sortedGear(kind);
+    if (!names.length) { box.innerHTML = `<div class="gear-empty">${GEAR[kind].empty}</div>`; return; }
+    box.innerHTML = names.map((name) => {
+      if (gearEdit && gearEdit.kind === kind && gearEdit.name === name) {
+        return `<div class="gear-row editing"><input class="gear-edit" data-gear-rename="${kind}" data-old="${esc(name)}" value="${esc(name)}" autocomplete="off" spellcheck="false" aria-label="Rename ${esc(name)}"></div>`;
+      }
+      return `
+        <div class="gear-row">
+          <span class="gear-name" title="${esc(name)}">${esc(name)}</span>
+          <button class="icon-btn" data-gear-edit="${kind}" data-name="${esc(name)}" aria-label="Rename ${esc(name)}">${IC.pencil}</button>
+          <button class="icon-btn" data-gear-remove="${kind}" data-name="${esc(name)}" aria-label="Remove ${esc(name)}">${IC.trash}</button>
+        </div>`;
+    }).join("");
+    const editing = box.querySelector(".gear-edit");
+    if (editing) { editing.focus(); editing.select(); }
+  });
+}
+
+function addGear(kind) {
+  const input = $(`gear-input-${kind}`);
+  const name = cleanName(input.value);
+  if (!name) return;
+  if (!hasGear(kind, name)) {
+    S.store[kind] = [...S.store[kind], name];
+    renderGearLists();
+    saveStore();
+  }
+  input.value = "";
+  input.focus();
+}
+
+function removeGear(kind, name) {
+  S.store[kind] = S.store[kind].filter((n) => n !== name);
+  renderGearLists();
+  saveStore();
+}
+
+function finishRename(input, save) {
+  const kind = input.dataset.gearRename, old = input.dataset.old;
+  const name = cleanName(input.value);
+  gearEdit = null;
+  if (save && name && name !== old && !hasGear(kind, name, old)) {
+    S.store[kind] = S.store[kind].map((n) => (n === old ? name : n));
+    saveStore();
+  }
+  renderGearLists();
+}
+
 // ── Suggestions under text fields (Film now, Camera and Lens later) ───────────
 let suggest = null;   // { input, items, active }
 
 function suggestionsFor(kind, text) {
   const q = text.trim().toLowerCase();
-  if (kind === "film") return S.store.favorites.filter((f) => f.toLowerCase().includes(q) && f.toLowerCase() !== q);
-  return [];
+  const list = kind === "film" ? S.store.favorites : kind === "camera" ? sortedGear("cameras") : kind === "lens" ? sortedGear("lenses") : [];
+  return list.filter((f) => f.toLowerCase().includes(q) && f.toLowerCase() !== q);
 }
 
 function closeSuggest() {
@@ -386,14 +485,16 @@ function openSuggest(input) {
   closeSuggest();
   const wrap = input.closest(".field-wrap");
   if (!wrap) return;
-  const noFavorites = kind === "film" && !S.store.favorites.length && !input.value.trim();
+  const emptyText = { film: "No favorites yet. Star films in the Films tab.", camera: "No cameras yet. Add them in the Gear tab.", lens: "No lenses yet. Add them in the Gear tab." }[kind];
+  const source = { film: S.store.favorites, camera: S.store.cameras, lens: S.store.lenses }[kind] || [];
+  const noFavorites = !source.length && !input.value.trim();
   if (!items.length && !noFavorites) return;
 
   const box = document.createElement("div");
   box.className = "suggest";
   box.setAttribute("role", "listbox");
   box.innerHTML = noFavorites
-    ? `<div class="suggest-empty">No favorites yet. Star films in the Films tab.</div>`
+    ? `<div class="suggest-empty">${emptyText}</div>`
     : items.map((it, i) => `<div class="suggest-item${i === 0 ? " active" : ""}" role="option" data-pick="${esc(it)}">${esc(it)}</div>`).join("");
   wrap.appendChild(box);
   suggest = { input, items, active: items.length ? 0 : -1 };
@@ -479,7 +580,7 @@ function bodyMeta() {
       <label class="field-label" for="f-${id}">${label}</label>
       <div class="field-row">
         <span class="field-icon">${icon}</span>
-        <input id="f-${id}" data-model="meta.${id}" ${id === "film" ? 'data-suggest="film"' : ""} type="${type}" placeholder="${placeholder}" value="${esc(S.meta[id])}" autocomplete="off" spellcheck="false">
+        <input id="f-${id}" data-model="meta.${id}" ${["film", "camera", "lens"].includes(id) ? `data-suggest="${id}"` : ""} type="${type}" placeholder="${placeholder}" value="${esc(S.meta[id])}" autocomplete="off" spellcheck="false">
       </div>
     </div>`;
   return `
@@ -673,11 +774,14 @@ getCurrentWebview().onDragDropEvent((event) => {
 
 // ── Event wiring (one delegated listener for everything) ──────────────────────
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-action],[data-tab],[data-tool],[data-star],[data-insert],[data-sep],[data-remove]");
+  const t = e.target.closest("[data-action],[data-tab],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
   if (!t || t.disabled) return;
   if (t.dataset.tab && t.dataset.tab !== S.tab) { S.tab = t.dataset.tab; render(); }
   if (t.dataset.tool) openTool(t.dataset.tool);
   if (t.dataset.star) toggleFavorite(t.dataset.star);
+  if (t.dataset.action === "gear-add") addGear(t.dataset.kind);
+  if (t.dataset.gearEdit) { gearEdit = { kind: t.dataset.gearEdit, name: t.dataset.name }; renderGearLists(); }
+  if (t.dataset.gearRemove) removeGear(t.dataset.gearRemove, t.dataset.name);
   if (t.dataset.action === "toggle-fav-filter") { S.filmFavoritesOnly = !S.filmFavoritesOnly; render(); }
   if (t.dataset.action === "pick-folder") pickFolder();
   if (t.dataset.action === "close-modal") closeModal();
@@ -700,13 +804,20 @@ document.addEventListener("input", (e) => {
 
 // Suggestion dropdown: show on focus, pick with the mouse (mousedown keeps the focus) or the keyboard
 document.addEventListener("focusin", (e) => { if (e.target.dataset?.suggest) openSuggest(e.target); });
-document.addEventListener("focusout", (e) => { if (e.target.dataset?.suggest) closeSuggest(); });
+document.addEventListener("focusout", (e) => {
+  if (e.target.dataset?.suggest) closeSuggest();
+  if (e.target.dataset?.gearRename && gearEdit) finishRename(e.target, false);   // clicking away cancels
+});
 document.addEventListener("mousedown", (e) => {
   const item = e.target.closest("[data-pick]");
   if (item && suggest) { e.preventDefault(); pickSuggestion(item.dataset.pick); }
 });
 
 document.addEventListener("keydown", (e) => {
+  const rename = e.target.dataset?.gearRename, adding = e.target.dataset?.gearInput;
+  if (rename && e.key === "Enter")  { e.preventDefault(); finishRename(e.target, true);  return; }
+  if (rename && e.key === "Escape") { e.preventDefault(); finishRename(e.target, false); return; }
+  if (adding && e.key === "Enter")  { e.preventDefault(); addGear(adding); return; }
   if (suggest) {
     if (e.key === "ArrowDown") { e.preventDefault(); moveSuggest(1); return; }
     if (e.key === "ArrowUp")   { e.preventDefault(); moveSuggest(-1); return; }
