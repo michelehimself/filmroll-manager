@@ -264,13 +264,18 @@ button { font-family: inherit; }
   border-bottom: 1px solid var(--border-soft);
 }
 .film-row {
-  display: grid; grid-template-columns: 36px minmax(160px, 1fr) 110px 140px; align-items: center;
+  display: grid; grid-template-columns: 36px minmax(160px, 1fr) 110px 140px 64px; align-items: center;
   column-gap: 10px; height: 38px; border-bottom: 1px solid var(--border-soft); font-size: 13px;
 }
 .film-row:hover { background: var(--bg-subtle); }
 .film-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .film-iso  { color: var(--text-2); font-variant-numeric: tabular-nums; }
 .film-type { color: var(--text-3); font-size: 12px; }
+.film-badge {
+  margin-left: 8px; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 10px; font-weight: 600; color: var(--text-3); vertical-align: 1px;
+}
+.film-actions { display: flex; justify-content: flex-end; gap: 2px; }
 .film-note { margin-top: 18px; font-size: 12px; color: var(--text-3); }
 .star {
   width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;

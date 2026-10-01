@@ -89,12 +89,13 @@ let S = {
   rename: { date: "", film: "" },
   sheet: { title: "", subtitle: "", scannedAt: "", orientation: "portrait", columns: "auto", showNames: false },   // values behind the Date and Film Name tags
   template: [],                      // [{ kind, value? }]
-  store: { favorites: [], cameras: [], lenses: [] },          // the user's own data, saved by Rust in library.json
+  store: { favorites: [], cameras: [], lenses: [], customFilms: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
   preview: null,         // file name shown in the quick look (Space bar), or null
   edits: {},             // unsaved changes typed into the list: file name → { camera?, lens?, film?, date? }
   selected: new Set(),   // file names chosen in the list; empty = tools work on all files
   anchor: null,          // last clicked file name (for shift-click ranges)
+  filmForm: { editing: null, brand: "", name: "", iso: "", type: "Color negative" },   // the Add / Edit Film dialog
   filmQuery: "",
   filmFavoritesOnly: false,
 };
@@ -608,7 +609,10 @@ function viewExplorer() {
 }
 
 // ── Films tab ─────────────────────────────────────────────────────────────────
-const filmFullName = (f) => `${f.brand} ${f.name}`;
+const FILM_TYPES = ["Color negative", "Color slide", "Black & white"];
+const filmFullName = (f) => `${f.brand} ${f.name}`.trim();
+// The built-in list plus the films the user added
+const allFilms = () => [...FILMS, ...S.store.customFilms.map((f) => ({ ...f, custom: true }))];
 const isFavorite = (name) => S.store.favorites.includes(name);
 
 async function saveStore() {
@@ -626,7 +630,10 @@ async function loadStore() {
   try {
     const data = await invoke("load_store");
     const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string") : []);
-    S.store = { ...data, favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses) };
+    const films = (v) => (Array.isArray(v) ? v.filter((f) => f && typeof f.name === "string").map((f) => ({
+      brand: String(f.brand || ""), name: f.name, iso: String(f.iso || ""), type: FILM_TYPES.includes(f.type) ? f.type : FILM_TYPES[0],
+    })) : []);
+    S.store = { ...data, favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses), customFilms: films(data.customFilms) };
   } catch (e) {
     S.storeError = `Your saved favorites could not be loaded: ${e}`;
   }
@@ -647,6 +654,7 @@ function viewFilms() {
             <input id="film-search" type="text" placeholder="Search films" value="${esc(S.filmQuery)}" autocomplete="off" spellcheck="false" aria-label="Search films">
           </div>
           <button class="btn btn-ghost${S.filmFavoritesOnly ? " on" : ""}" data-action="toggle-fav-filter" aria-pressed="${S.filmFavoritesOnly}">Favorites only</button>
+          <button class="btn btn-primary" data-action="add-film">Add Film</button>
         </div>
       </div>
       <div id="store-error">${S.storeError ? `<div class="error-banner" role="alert">${esc(S.storeError)}</div>` : ""}</div>
@@ -658,30 +666,134 @@ function renderFilmList() {
   const box = $("film-list");
   if (!box) return;
   const words = S.filmQuery.toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = FILMS.filter((f) => {
+  const shown = allFilms().filter((f) => {
     const full = filmFullName(f);
     if (S.filmFavoritesOnly && !isFavorite(full)) return false;
-    const hay = `${full} ${f.iso} ${f.type}`.toLowerCase();
+    const hay = `${full} ${f.iso} ${f.type} ${f.custom ? "custom" : ""}`.toLowerCase();
     return words.every((w) => hay.includes(w));
   });
   if (!shown.length) {
     box.innerHTML = `<div class="empty-view"><div class="empty-title">${S.filmFavoritesOnly && !S.filmQuery ? "No favorites yet" : "No films found"}</div><div class="empty-sub">${S.filmFavoritesOnly && !S.filmQuery ? "Click the star next to a film to add it here." : "Try a different search."}</div></div>`;
     return;
   }
-  let html = "", brand = null;
-  shown.forEach((f) => {
-    if (f.brand !== brand) { brand = f.brand; html += `<div class="film-brand">${esc(brand)}</div>`; }
-    const full = filmFullName(f), on = isFavorite(full);
-    html += `
+  // Brands in the order of the built-in list, new brands of your own films come after them
+  const brands = [];
+  shown.forEach((f) => { const b = f.brand || "Other"; if (!brands.includes(b)) brands.push(b); });
+  let html = "";
+  brands.forEach((brand) => {
+    html += `<div class="film-brand">${esc(brand)}</div>`;
+    shown.filter((f) => (f.brand || "Other") === brand).forEach((f) => {
+      const full = filmFullName(f), on = isFavorite(full);
+      html += `
       <div class="film-row">
         <button class="star${on ? " on" : ""}" data-star="${esc(full)}" aria-pressed="${on}" aria-label="${on ? "Remove from favorites" : "Add to favorites"}: ${esc(full)}">${IC.star}</button>
-        <div class="film-name">${esc(f.name)}</div>
-        <div class="film-iso">ISO ${esc(f.iso)}</div>
+        <div class="film-name">${esc(f.name)}${f.custom ? `<span class="film-badge">Custom</span>` : ""}</div>
+        <div class="film-iso">${f.iso ? `ISO ${esc(f.iso)}` : ""}</div>
         <div class="film-type">${esc(f.type)}</div>
+        <div class="film-actions">${f.custom ? `
+          <button class="icon-btn" data-film-edit="${esc(full)}" aria-label="Edit ${esc(full)}">${IC.pencil}</button>
+          <button class="icon-btn" data-film-remove="${esc(full)}" aria-label="Remove ${esc(full)}">${IC.trash}</button>` : ""}</div>
       </div>`;
+    });
   });
-  html += `<p class="film-note">Missing a film? You can type any film name in the Film field – it does not have to be on this list.</p>`;
+  html += `<p class="film-note">Missing a film? Add your own with “Add Film”. You can also type any name in the Film field.</p>`;
   box.innerHTML = html;
+}
+
+// Add / edit a film of your own
+function openFilmForm(editing = null) {
+  const film = editing && S.store.customFilms.find((f) => filmFullName(f) === editing);
+  S.filmForm = film
+    ? { editing, brand: film.brand, name: film.name, iso: film.iso, type: film.type }
+    : { editing: null, brand: "", name: "", iso: "", type: FILM_TYPES[0] };
+  S.error = null;
+  S.modal = "film";
+  renderModal();
+}
+
+// The speed is added to the name if it is missing, because the number at the end of the name is what gets written into the image files
+function finalFilmName(form) {
+  const name = cleanName(form.name), iso = form.iso.trim();
+  const hasSpeed = /^\d+$/.test(iso) && new RegExp(`(^|[^0-9])${iso}([^0-9]|$)`).test(name);
+  const full = name && /^\d+$/.test(iso) && !hasSpeed ? `${name} ${iso}` : name;
+  return full;
+}
+
+function updateFilmPreview() {
+  const box = $("film-preview");
+  if (!box) return;
+  const name = finalFilmName(S.filmForm), brand = cleanName(S.filmForm.brand);
+  box.innerHTML = name
+    ? `It will appear as <strong>${esc(`${brand} ${name}`.trim())}</strong>. The speed at the end of the name is what gets written into the image files.`
+    : "Enter a name to see how the film will appear.";
+}
+
+function bodyFilm() {
+  const f = S.filmForm;
+  const text = (id, label, placeholder, attrs = "") => `
+    <div class="field-wrap">
+      <label class="field-label" for="f-f-${id}">${label}</label>
+      <div class="field-row"><input id="f-f-${id}" data-model="filmForm.${id}" type="text" ${attrs} placeholder="${placeholder}" value="${esc(f[id])}" autocomplete="off" spellcheck="false"></div>
+    </div>`;
+  return `
+    <div class="fields">
+      ${text("brand", "Brand", "e.g. Kodak, Ilford, or your lab’s own brand")}
+      ${text("name", "Name", "e.g. Portra 400")}
+      <div class="fields fields-pair">
+        ${text("iso", "Speed (ISO)", "e.g. 400", 'inputmode="numeric"')}
+        <div class="field-wrap">
+          <label class="field-label" for="f-f-type">Type</label>
+          <div class="field-row select"><select id="f-f-type" data-model="filmForm.type">
+            ${FILM_TYPES.map((t) => `<option value="${t}"${f.type === t ? " selected" : ""}>${t}</option>`).join("")}
+          </select></div>
+        </div>
+      </div>
+      <div class="hint-box" id="film-preview"></div>
+    </div>`;
+}
+
+function saveFilm() {
+  const form = S.filmForm;
+  const fail = (message) => { S.error = message; renderModal(); };
+  if (!cleanName(form.name)) return fail("Please enter the name of the film.");
+  const iso = form.iso.trim();
+  if (iso && !(/^\d{1,5}$/.test(iso) && Number(iso) > 0)) return fail("The speed (ISO) must be a number, for example 400.");
+
+  // A brand that exists already keeps its spelling, so "kodak" lands under "Kodak"
+  const typed = cleanName(form.brand);
+  const brand = allFilms().find((f) => f.brand && f.brand.toLowerCase() === typed.toLowerCase())?.brand || typed;
+  const film = { brand, name: finalFilmName(form), iso, type: form.type };
+  const full = filmFullName(film);
+  if (allFilms().some((f) => filmFullName(f).toLowerCase() === full.toLowerCase() && filmFullName(f) !== form.editing)) {
+    return fail("This film is already in the list.");
+  }
+
+  if (form.editing) {
+    S.store.customFilms = S.store.customFilms.map((f) => (filmFullName(f) === form.editing ? film : f));
+    S.store.favorites = S.store.favorites.map((n) => (n === form.editing ? full : n));   // a favorite stays a favorite
+  } else {
+    S.store.customFilms = [...S.store.customFilms, film];
+  }
+  saveStore();
+  S.modal = null;
+  S.error = null;
+  renderModal();
+  renderFilmList();
+  showNotice(form.editing ? "Film saved." : "Film added.");
+}
+
+async function removeCustomFilm(full) {
+  let sure = false;
+  try {
+    sure = await ask(`Remove “${full}” from your films?`, { title: "Remove film", kind: "warning", okLabel: "Remove", cancelLabel: "Cancel" });
+  } catch {
+    return;
+  }
+  if (!sure) return;
+  S.store.customFilms = S.store.customFilms.filter((f) => filmFullName(f) !== full);
+  S.store.favorites = S.store.favorites.filter((n) => n !== full);
+  saveStore();
+  renderFilmList();
 }
 
 function toggleFavorite(name) {
@@ -800,7 +912,7 @@ function suggestionsFor(kind, text) {
     const favorites = S.store.favorites.filter(matches);
     // An empty field shows only the favorites; typing searches the whole film list
     if (!words.length) return { items: favorites, favorites: favorites.length };
-    const others = FILMS.map(filmFullName).filter((n) => !isFavorite(n) && matches(n));
+    const others = allFilms().map(filmFullName).filter((n) => !isFavorite(n) && matches(n));
     return { items: [...favorites, ...others], favorites: favorites.length };
   }
   const list = kind === "camera" ? sortedGear("cameras") : kind === "lens" ? sortedGear("lenses") : [];
@@ -873,10 +985,11 @@ function renderModal() {
   const box = $("modal");
   if (!S.modal) { box.innerHTML = ""; return; }
   const m = {
-    reverse: { title: "Reverse Order", sub: "Every file swaps its name with the file on the opposite end of the roll. Frame 1 becomes the last frame, and so on.", body: bodyReverse(), ok: "Confirm", wait: "Reversing frame order…" },
-    meta:    { title: "Bulk Edit Meta Data", sub: "This information is embedded into all image files in the folder. Every field is optional.", body: bodyMeta(), ok: "Embed Metadata", wait: "Embedding metadata…" },
-    sheet:   { title: "Create Contact Sheet", sub: "All frames on one A4 page, ready to print and file away. It is saved as a PDF on your computer.", body: bodySheet(), ok: "Save as PDF…", wait: "Creating the contact sheet…" },
-    rename:  { title: "Bulk Rename", sub: "Click a tag to insert it at the cursor. You can type text between tags, too.", body: bodyRename(), ok: "Rename Files", wait: "Renaming files…" },
+    film:    { title: S.filmForm.editing ? "Edit Film" : "Add Film", sub: "Your own film. It shows up in the list and as a suggestion in the Film field.", body: bodyFilm, ok: S.filmForm.editing ? "Save" : "Add Film", wait: "" },
+    reverse: { title: "Reverse Order", sub: "Every file swaps its name with the file on the opposite end of the roll. Frame 1 becomes the last frame, and so on.", body: bodyReverse, ok: "Confirm", wait: "Reversing frame order…" },
+    meta:    { title: "Bulk Edit Meta Data", sub: "This information is embedded into all image files in the folder. Every field is optional.", body: bodyMeta, ok: "Embed Metadata", wait: "Embedding metadata…" },
+    sheet:   { title: "Create Contact Sheet", sub: "All frames on one A4 page, ready to print and file away. It is saved as a PDF on your computer.", body: bodySheet, ok: "Save as PDF…", wait: "Creating the contact sheet…" },
+    rename:  { title: "Bulk Rename", sub: "Click a tag to insert it at the cursor. You can type text between tags, too.", body: bodyRename, ok: "Rename Files", wait: "Renaming files…" },
   }[S.modal];
 
   const inner = S.busy ? `
@@ -886,7 +999,7 @@ function renderModal() {
       <p class="loading-sub" id="progress-text">0 %</p>
     </div>` : `
     <div class="modal-head"><p class="modal-title">${m.title}</p><p class="modal-sub">${m.sub}</p></div>
-    <div class="modal-body">${m.body}</div>
+    <div class="modal-body">${m.body()}</div>
     ${S.error ? `<div class="error-banner" role="alert">${esc(S.error)}</div>` : ""}
     <div class="modal-foot">
       <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
@@ -894,6 +1007,7 @@ function renderModal() {
     </div>`;
   box.innerHTML = `<div class="modal-backdrop"><div class="modal${S.modal === "sheet" ? " wide" : ""}" role="dialog" aria-modal="true" aria-label="${m.title}">${inner}</div></div>`;
   if (!S.busy && S.modal === "rename") mountEditor();
+  if (!S.busy && S.modal === "film") { updateFilmPreview(); $("f-f-name")?.focus(); }
   if (!S.busy && S.modal === "sheet") renderSheetPreview();
 }
 
@@ -1163,6 +1277,7 @@ function renderPreview() {
 // Runs the chosen tool with a progress bar, then refreshes the list
 async function confirmModal() {
   if (S.busy || !S.modal) return;
+  if (S.modal === "film") { saveFilm(); return; }
   const tool = S.modal;
   const count = scopeFiles().length;
   const files = scopeNames();
@@ -1244,7 +1359,7 @@ document.addEventListener("click", (e) => {
   // File list: click a row to select, Cmd/Ctrl-click to add, Shift-click for a range
   const row = e.target.closest(".row.file");
   if (row && !e.target.closest("input, button")) { selectRow(row.dataset.row, e); return; }
-  const t = e.target.closest("[data-action],[data-rotate],[data-tab],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
+  const t = e.target.closest("[data-action],[data-film-edit],[data-film-remove],[data-rotate],[data-tab],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
   if (!t || t.disabled) return;
   if (t.dataset.tab && t.dataset.tab !== S.tab) { S.tab = t.dataset.tab; render(); }
   if (t.dataset.tool) openTool(t.dataset.tool);
@@ -1257,6 +1372,9 @@ document.addEventListener("click", (e) => {
   if (t.dataset.action === "pick-folder") pickFolder();
   if (t.dataset.action === "open-folder") invoke("open_folder", { folder: S.folder }).catch((err) => { S.error = String(err); render(); });
   if (t.dataset.action === "save-edits") saveEdits();
+  if (t.dataset.action === "add-film") openFilmForm();
+  if (t.dataset.filmEdit) openFilmForm(t.dataset.filmEdit);
+  if (t.dataset.filmRemove) removeCustomFilm(t.dataset.filmRemove);
 
   if (t.dataset.action === "close-snackbar") hideSnackbar();
   if (t.dataset.action === "discard-edits") discardEdits();
@@ -1296,6 +1414,7 @@ document.addEventListener("input", (e) => {
   const [group, key] = model.split(".");
   S[group][key] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
   if (S.modal === "rename") renderPreview();
+  if (S.modal === "film") updateFilmPreview();
   if (S.modal === "sheet") scheduleSheetPreview();
   if (e.target.dataset.suggest) openSuggest(e.target);
 });
@@ -1319,6 +1438,7 @@ document.addEventListener("keydown", (e) => {
     else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); stepPreview(1); }
     return;
   }
+  if (e.key === "Enter" && S.modal === "film" && e.target.tagName === "INPUT") { e.preventDefault(); saveFilm(); return; }
   // Space does not scroll the page any more; in the file list it opens the quick look
   if (e.key === " " && !isTyping(e.target) && !S.modal) {
     e.preventDefault();
