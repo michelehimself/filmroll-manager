@@ -91,8 +91,9 @@ let S = {
   rename: { date: "", film: "" },
   sheet: { title: "", subtitle: "", scannedAt: "", orientation: "portrait", columns: "auto", showNames: false },   // values behind the Date and Film Name tags
   template: [],                      // [{ kind, value? }]
-  store: { favorites: [], cameras: [], lenses: [], customFilms: [] },          // the user's own data, saved by Rust in library.json
+  store: { favorites: [], cameras: [], lenses: [], customFilms: [], recentFolders: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
+  missingRecents: new Set(),   // recent folders that do not exist any more
   preview: null,         // file name shown in the quick look (Space bar), or null
   edits: {},             // unsaved changes typed into the list: file name → { camera?, lens?, film?, date? }
   selected: new Set(),   // file names chosen in the list; empty = tools work on all files
@@ -146,6 +147,7 @@ async function loadFolder(path) {
       S.selected = new Set();
       S.anchor = null;
       S.edits = {};
+      rememberFolder(path, files.length);
     } else {
       S.error = "This folder contains no JPG, PNG or TIFF images.";
     }
@@ -615,6 +617,7 @@ function render() {
     observeThumbnails();
     updateSelectionUI();
     updateEditBar();
+    if (!S.folder && !S.loading) checkRecents();
   }
   renderModal();
 }
@@ -639,6 +642,82 @@ function viewSidebar() {
   return `<aside class="sidebar">${sections}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p>${S.folder ? `<p class="sidebar-hint"><span class="keycap">Space</span> Press to enlarge the selected picture</p>` : ""}</aside>`;
 }
 
+// ── Recent folders (shown on the Select Folder page) ──────────────────────────
+const MAX_RECENTS = 10;
+
+function rememberFolder(path, count) {
+  const entry = { path, name: folderName(path), count, openedAt: Date.now() };
+  S.store.recentFolders = [entry, ...S.store.recentFolders.filter((r) => r.path !== path)].slice(0, MAX_RECENTS);
+  saveStore();
+}
+
+function timeAgo(ms) {
+  const minutes = Math.round((Date.now() - ms) / 60000);
+  if (!ms || minutes < 0) return "";
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  const d = new Date(ms), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+const shortPath = (path) => path.replace(/^\/Users\/[^/]+/, "~");   // /Users/anna/Scans → ~/Scans
+
+function viewRecents() {
+  const list = S.store.recentFolders;
+  if (!list.length) return "";
+  const rows = list.map((r) => {
+    const meta = [`${r.count} image${r.count === 1 ? "" : "s"}`, timeAgo(r.openedAt)].filter(Boolean).join("  ·  ");
+    return `
+      <div class="recent" data-path="${esc(r.path)}" data-meta="${esc(meta)}">
+        <button class="recent-open" data-recent="${esc(r.path)}" title="${esc(r.path)}">
+          <span class="recent-icon">${IC.folder}</span>
+          <span class="recent-text"><span class="recent-name">${esc(r.name)}</span><span class="recent-path">${esc(shortPath(r.path))}</span></span>
+          <span class="recent-meta">${esc(meta)}</span>
+        </button>
+        <button class="icon-btn" data-recent-remove="${esc(r.path)}" aria-label="Remove ${esc(r.name)} from the list">${IC.close}</button>
+      </div>`;
+  }).join("");
+  return `
+    <div class="recents">
+      <div class="recents-head"><span>Recent folders</span><button class="link-btn" data-action="clear-recents">Clear list</button></div>
+      ${rows}
+    </div>`;
+}
+
+// Folders that were moved, deleted or sit on a disk that is not connected are greyed out
+async function checkRecents() {
+  const list = S.store.recentFolders;
+  if (!list.length) return;
+  try {
+    const exists = await invoke("check_folders", { paths: list.map((r) => r.path) });
+    S.missingRecents = new Set(list.filter((_, i) => !exists[i]).map((r) => r.path));
+  } catch { return; }
+  document.querySelectorAll(".recent").forEach((row) => {
+    const missing = S.missingRecents.has(row.dataset.path);
+    row.classList.toggle("missing", missing);
+    row.querySelector(".recent-open").disabled = missing;
+    row.querySelector(".recent-meta").textContent = missing ? "Not found" : row.dataset.meta;
+  });
+}
+
+function removeRecent(path) {
+  S.store.recentFolders = S.store.recentFolders.filter((r) => r.path !== path);
+  saveStore();
+  render();
+}
+
+function clearRecents() {
+  S.store.recentFolders = [];
+  S.missingRecents = new Set();
+  saveStore();
+  render();
+}
+
 function viewDropArea() {
   const error = S.error ? `<div class="error-banner" role="alert">${esc(S.error)}</div>` : "";
   if (S.loading) {
@@ -654,6 +733,7 @@ function viewDropArea() {
         <div class="dz-sub">or click to browse</div>
       </div>
       ${error}
+      ${viewRecents()}
     </div>`;
 }
 
@@ -728,14 +808,17 @@ async function loadStore() {
   try {
     const data = await invoke("load_store");
     const list = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string") : []);
+    const recents = (v) => (Array.isArray(v) ? v.filter((r) => r && typeof r.path === "string").slice(0, MAX_RECENTS).map((r) => ({
+      path: r.path, name: String(r.name || folderName(r.path)), count: Number(r.count) || 0, openedAt: Number(r.openedAt) || 0,
+    })) : []);
     const films = (v) => (Array.isArray(v) ? v.filter((f) => f && typeof f.name === "string").map((f) => ({
       brand: String(f.brand || ""), name: f.name, iso: String(f.iso || ""), type: FILM_TYPES.includes(f.type) ? f.type : FILM_TYPES[0],
     })) : []);
-    S.store = { ...data, favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses), customFilms: films(data.customFilms) };
+    S.store = { ...data, favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses), customFilms: films(data.customFilms), recentFolders: recents(data.recentFolders) };
   } catch (e) {
     S.storeError = `Your saved favorites could not be loaded: ${e}`;
   }
-  if (S.tab === "films" || S.tab === "gear") render();
+  if (S.tab === "films" || S.tab === "gear" || (S.tab === "manager" && !S.folder && !S.loading && !S.modal)) render();
 }
 
 function viewFilms() {
@@ -1459,7 +1542,7 @@ document.addEventListener("click", (e) => {
   // File list: click a row to select, Cmd/Ctrl-click to add, Shift-click for a range
   const row = e.target.closest(".row.file");
   if (row && !e.target.closest("input, button")) { selectRow(row.dataset.row, e); return; }
-  const t = e.target.closest("[data-action],[data-film-edit],[data-film-remove],[data-rotate],[data-tab],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
+  const t = e.target.closest("[data-action],[data-recent],[data-recent-remove],[data-film-edit],[data-film-remove],[data-rotate],[data-tab],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
   if (!t || t.disabled) return;
   if (t.dataset.tab && t.dataset.tab !== S.tab) { S.tab = t.dataset.tab; render(); }
   if (t.dataset.tool) openTool(t.dataset.tool);
@@ -1472,6 +1555,9 @@ document.addEventListener("click", (e) => {
   if (t.dataset.action === "pick-folder") pickFolder();
   if (t.dataset.action === "open-folder") invoke("open_folder", { folder: S.folder }).catch((err) => { S.error = String(err); render(); });
   if (t.dataset.action === "save-edits") saveEdits();
+  if (t.dataset.action === "clear-recents") clearRecents();
+  if (t.dataset.recent) loadFolder(t.dataset.recent);
+  if (t.dataset.recentRemove) removeRecent(t.dataset.recentRemove);
   if (t.dataset.action === "add-film") openFilmForm();
   if (t.dataset.filmEdit) openFilmForm(t.dataset.filmEdit);
   if (t.dataset.filmRemove) removeCustomFilm(t.dataset.filmRemove);

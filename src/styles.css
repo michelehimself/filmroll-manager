@@ -229,7 +229,7 @@ button { font-family: inherit; }
 .thumb.failed::after { content: "?"; font-size: 14px; }
 
 /* ── Drop zone & loading ────────────────────────── */
-.drop-area { flex: 1; display: flex; flex-direction: column; padding: 28px 36px; min-width: 0; }
+.drop-area { flex: 1; display: flex; flex-direction: column; padding: 28px 36px; min-width: 0; overflow-y: auto; }
 .step-heading { font-size: 20px; font-weight: 600; margin-bottom: 5px; }
 .step-sub     { font-size: 13px; color: var(--text-2); line-height: 1.5; }
 .dropzone {
@@ -244,6 +244,23 @@ button { font-family: inherit; }
 .dz-sub   { font-size: 12px; color: var(--text-3); }
 .drop-area .error-banner { margin: 18px 0 0; }
 
+.recents { margin-top: 28px; }
+.recents-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; font-size: 11px; font-weight: 600; color: var(--text-3); }
+.recent { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; padding-right: 8px; background: var(--surface); border: 1px solid var(--border-soft); border-radius: 8px; transition: border-color .14s; }
+.recent:hover { border-color: var(--accent); }
+.recent-open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 6px 10px 14px;
+  background: none; border: none; text-align: left; cursor: pointer; color: inherit; font: inherit;
+}
+.recent-icon { display: flex; color: var(--accent); flex-shrink: 0; }
+.recent-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.recent-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-path { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-meta { font-size: 11.5px; color: var(--text-2); white-space: nowrap; flex-shrink: 0; }
+.recent.missing { opacity: .55; }
+.recent.missing:hover { border-color: var(--border-soft); }
+.recent.missing .recent-open { cursor: default; }
+.recent.missing .recent-icon { color: var(--text-3); }
 .loading-view { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
 .loading-msg { font-size: 15px; font-weight: 500; }
 .loading-sub { font-size: 12px; color: var(--text-3); }
