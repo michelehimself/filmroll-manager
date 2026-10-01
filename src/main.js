@@ -27,6 +27,7 @@ const IC = {
   rotateCw:  svg(16, 1.6, `<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>`),
   rotateCcw: svg(16, 1.6, `<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>`),
   close:     svg(14, 1.8, `<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>`),
+  keyboard:  svg(15, 1.6, `<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="6" y1="9" x2="6.01" y2="9"/><line x1="10" y1="9" x2="10.01" y2="9"/><line x1="14" y1="9" x2="14.01" y2="9"/><line x1="18" y1="9" x2="18.01" y2="9"/><line x1="7" y1="15" x2="17" y2="15"/>`),
   chevronL:  svg(22, 1.8, `<polyline points="15 18 9 12 15 6"/>`),
   chevronR:  svg(22, 1.8, `<polyline points="9 18 15 12 9 6"/>`),
   plus:      svg(15, 1.8, `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`),
@@ -44,6 +45,8 @@ const IC = {
   sheet:     svg(22, 1.6, `<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>`),
 };
 
+const IS_MAC = navigator.userAgent.includes("Mac");
+const MOD = IS_MAC ? "⌘" : "Ctrl";   // the modifier key in shortcuts
 const FILE_MANAGER_LABEL = navigator.userAgent.includes("Mac") ? "Open in Finder"
   : navigator.userAgent.includes("Windows") ? "Open in Explorer" : "Open Folder";
 
@@ -639,7 +642,7 @@ function viewSidebar() {
     </button>`;
   const sections = SECTIONS.map(([id, label]) =>
     `<div class="sidebar-section"><div class="sidebar-head">${label}</div>${TOOLS.filter((t) => t.section === id).map(tile).join("")}</div>`).join("");
-  return `<aside class="sidebar">${sections}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p>${S.folder ? `<p class="sidebar-hint"><span class="keycap">Space</span> Press to enlarge the selected picture</p>` : ""}</aside>`;
+  return `<aside class="sidebar">${sections}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p><button class="shortcuts-btn" data-action="show-shortcuts">${IC.keyboard}<span>Shortcuts</span></button></aside>`;
 }
 
 // ── Recent folders (shown on the Select Folder page) ──────────────────────────
@@ -770,8 +773,8 @@ function viewExplorer() {
         <div class="folder-tools" id="folder-tools">
           <div class="quick" role="group" aria-label="Quick tools">
             <span class="quick-label">Rotate</span>
-            <button class="btn btn-ghost square" data-rotate="ccw" title="Rotate counterclockwise" aria-label="Rotate selected files counterclockwise" disabled>${IC.rotateCcw}</button>
-            <button class="btn btn-ghost square" data-rotate="cw" title="Rotate clockwise" aria-label="Rotate selected files clockwise" disabled>${IC.rotateCw}</button>
+            <button class="btn btn-ghost square" data-rotate="ccw" title="Rotate counterclockwise (${MOD}+L)" aria-label="Rotate selected files counterclockwise" disabled>${IC.rotateCcw}</button>
+            <button class="btn btn-ghost square" data-rotate="cw" title="Rotate clockwise (${MOD}+R)" aria-label="Rotate selected files clockwise" disabled>${IC.rotateCw}</button>
           </div>
           <span class="tool-sep" aria-hidden="true"></span>
           <button class="btn btn-ghost" data-action="open-folder">${FILE_MANAGER_LABEL}</button>
@@ -1140,6 +1143,43 @@ function pickSuggestion(value) {
   closeSuggest();
 }
 
+// ── Keyboard shortcuts overview ───────────────────────────────────────────────
+function openShortcuts() {
+  if (S.busy) return;
+  S.error = null;
+  S.modal = "shortcuts";
+  renderModal();
+}
+
+function bodyShortcuts() {
+  const keys = (list) => list.map((k) => `<span class="keycap">${esc(k)}</span>`).join("");
+  const groups = [
+    ["File list", [
+      [["Space"], "Enlarge the selected picture (starts with the first picture if nothing is selected)"],
+      [["↑", "↓"], "Select the previous or next picture"],
+      [[MOD, "R"], "Rotate the selected pictures clockwise"],
+      [[MOD, "L"], "Rotate the selected pictures counterclockwise"],
+      [[MOD, "Click"], "Add a picture to the selection"],
+      [["Shift", "Click"], "Select a range of pictures"],
+    ]],
+    ["In an input field of the list", [
+      [["Enter"], "Jump to the same field in the next row"],
+      [["Esc"], "Restore the original value"],
+    ]],
+    ["Large preview", [
+      [["Space"], "Close the preview (Esc works, too)"],
+      [["←", "→"], "Show the previous or next picture"],
+      [["R"], "Rotate the picture clockwise"],
+      [["L"], "Rotate the picture counterclockwise"],
+    ]],
+  ];
+  return groups.map(([title, rows]) => `
+    <div class="shortcut-group">
+      <div class="shortcut-title">${title}</div>
+      ${rows.map(([k, text]) => `<div class="shortcut-row"><span class="shortcut-keys">${keys(k)}</span><span class="shortcut-text">${esc(text)}</span></div>`).join("")}
+    </div>`).join("");
+}
+
 // ── Tool dialogs ──────────────────────────────────────────────────────────────
 function openTool(id) {
   if (S.busy) return;
@@ -1166,6 +1206,7 @@ function renderModal() {
   const box = $("modal");
   if (!S.modal) { box.innerHTML = ""; return; }
   const m = {
+    shortcuts: { title: "Keyboard Shortcuts", sub: "Shortcuts for the Manager.", body: bodyShortcuts, ok: null },
     film:    { title: S.filmForm.editing ? "Edit Film" : "Add Film", sub: "Your own film. It shows up in the list and as a suggestion in the Film field.", body: bodyFilm, ok: S.filmForm.editing ? "Save" : "Add Film", wait: "" },
     reverse: { title: "Reverse Order", sub: "Every file swaps its name with the file on the opposite end of the roll. Frame 1 becomes the last frame, and so on.", body: bodyReverse, ok: "Confirm", wait: "Reversing frame order…" },
     meta:    { title: "Bulk Edit Meta Data", sub: "This information is embedded into all image files in the folder. Every field is optional.", body: bodyMeta, ok: "Embed Metadata", wait: "Embedding metadata…" },
@@ -1183,8 +1224,10 @@ function renderModal() {
     <div class="modal-body">${m.body()}</div>
     ${S.error ? `<div class="error-banner" role="alert">${esc(S.error)}</div>` : ""}
     <div class="modal-foot">
-      <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
-      <button class="btn ${S.modal === "rename" ? "btn-success" : "btn-primary"}" id="modal-ok" data-action="confirm-modal">${m.ok}</button>
+      ${m.ok === null
+        ? `<button class="btn btn-primary" data-action="close-modal">Close</button>`
+        : `<button class="btn btn-ghost" data-action="close-modal">Cancel</button>
+      <button class="btn ${S.modal === "rename" ? "btn-success" : "btn-primary"}" id="modal-ok" data-action="confirm-modal">${m.ok}</button>`}
     </div>`;
   box.innerHTML = `<div class="modal-backdrop"><div class="modal${S.modal === "sheet" ? " wide" : ""}" role="dialog" aria-modal="true" aria-label="${m.title}">${inner}</div></div>`;
   if (!S.busy && S.modal === "rename") mountEditor();
@@ -1555,6 +1598,7 @@ document.addEventListener("click", (e) => {
   if (t.dataset.action === "pick-folder") pickFolder();
   if (t.dataset.action === "open-folder") invoke("open_folder", { folder: S.folder }).catch((err) => { S.error = String(err); render(); });
   if (t.dataset.action === "save-edits") saveEdits();
+  if (t.dataset.action === "show-shortcuts") openShortcuts();
   if (t.dataset.action === "clear-recents") clearRecents();
   if (t.dataset.recent) loadFolder(t.dataset.recent);
   if (t.dataset.recentRemove) removeRecent(t.dataset.recentRemove);
@@ -1627,6 +1671,12 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Enter" && S.modal === "film" && e.target.tagName === "INPUT") { e.preventDefault(); saveFilm(); return; }
+  // Cmd+R / Cmd+L (Ctrl on Windows and Linux) turn the selected pictures in the file list
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && ["r", "l"].includes(e.key.toLowerCase()) && !S.modal && S.tab === "manager" && S.folder) {
+    e.preventDefault();   // also keeps the web view from reloading itself
+    if (!isTyping(e.target) && !hasEdits() && !e.repeat) rotateSelected(e.key.toLowerCase() === "r");
+    return;
+  }
   // Space does not scroll the page any more; in the file list it opens the quick look
   if (e.key === " " && !isTyping(e.target) && !S.modal) {
     e.preventDefault();
