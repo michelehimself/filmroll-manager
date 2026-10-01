@@ -24,6 +24,8 @@ const IC = {
   cameraBig: svg(40, 1.3, CAMERA),
   film:      svg(15, 1.6, FILM),
   filmBig:   svg(40, 1.3, FILM),
+  search:    svg(15, 1.6, `<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>`),
+  star:      svg(16, 1.6, `<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>`),
   calendar:  svg(15, 1.6, `<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>`),
   clock:     svg(15, 1.6, `<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>`),
   aperture:  svg(15, 1.6, `<circle cx="12" cy="12" r="10"/><line x1="14.31" y1="8" x2="20.05" y2="17.94"/><line x1="9.69" y1="8" x2="21.17" y2="8"/><line x1="7.38" y1="12" x2="13.12" y2="2.06"/><line x1="9.69" y1="16" x2="3.95" y2="6.06"/><line x1="14.31" y1="16" x2="2.83" y2="16"/><line x1="16.62" y1="12" x2="10.88" y2="21.94"/>`),
@@ -75,6 +77,10 @@ let S = {
   meta: { camera: "", lens: "", film: "", date: todayString(), time: "12:00" },
   rename: { date: "", film: "" },   // values behind the Date and Film Name tags
   template: [],                      // [{ kind, value? }]
+  store: { favorites: [] },          // the user's own data, saved by Rust in library.json
+  storeError: null,
+  filmQuery: "",
+  filmFavoritesOnly: false,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -200,7 +206,7 @@ function render() {
   const view = $("view");
   const scroll = document.querySelector(".filelist")?.scrollTop ?? 0;
   if (S.tab === "manager") view.innerHTML = viewManager();
-  if (S.tab === "films")   view.innerHTML = viewPlaceholder(IC.filmBig, "Films", "Your film database with favorites will live here.");
+  if (S.tab === "films")   { view.innerHTML = viewFilms(); renderFilmList(); }
   if (S.tab === "gear")    view.innerHTML = viewPlaceholder(IC.cameraBig, "Gear", "Your cameras and lenses will live here.");
   if (S.tab === "manager") {
     const list = document.querySelector(".filelist");
@@ -277,6 +283,135 @@ function viewExplorer() {
     </section>`;
 }
 
+// ── Films tab ─────────────────────────────────────────────────────────────────
+const filmFullName = (f) => `${f.brand} ${f.name}`;
+const isFavorite = (name) => S.store.favorites.includes(name);
+
+async function saveStore() {
+  try {
+    await invoke("save_store", { data: S.store });
+    S.storeError = null;
+  } catch (e) {
+    S.storeError = `Your favorites could not be saved: ${e}`;
+  }
+  const box = $("film-error");
+  if (box) box.innerHTML = S.storeError ? `<div class="error-banner" role="alert">${esc(S.storeError)}</div>` : "";
+}
+
+async function loadStore() {
+  try {
+    const data = await invoke("load_store");
+    S.store = { ...data, favorites: Array.isArray(data.favorites) ? data.favorites : [] };
+  } catch (e) {
+    S.storeError = `Your saved favorites could not be loaded: ${e}`;
+  }
+  if (S.tab === "films") render();
+}
+
+function viewFilms() {
+  return `
+    <div class="page">
+      <div class="page-head">
+        <div>
+          <p class="step-heading">Films</p>
+          <p class="step-sub">Star your favorite films. They show up as suggestions in the Film field of Bulk Edit Meta Data.</p>
+        </div>
+        <div class="page-tools">
+          <div class="search">
+            <span class="field-icon">${IC.search}</span>
+            <input id="film-search" type="text" placeholder="Search films" value="${esc(S.filmQuery)}" autocomplete="off" spellcheck="false" aria-label="Search films">
+          </div>
+          <button class="btn btn-ghost${S.filmFavoritesOnly ? " on" : ""}" data-action="toggle-fav-filter" aria-pressed="${S.filmFavoritesOnly}">Favorites only</button>
+        </div>
+      </div>
+      <div id="film-error">${S.storeError ? `<div class="error-banner" role="alert">${esc(S.storeError)}</div>` : ""}</div>
+      <div class="page-scroll" id="film-list"></div>
+    </div>`;
+}
+
+function renderFilmList() {
+  const box = $("film-list");
+  if (!box) return;
+  const words = S.filmQuery.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = FILMS.filter((f) => {
+    const full = filmFullName(f);
+    if (S.filmFavoritesOnly && !isFavorite(full)) return false;
+    const hay = `${full} ${f.iso} ${f.type}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
+  if (!shown.length) {
+    box.innerHTML = `<div class="empty-view"><div class="empty-title">${S.filmFavoritesOnly && !S.filmQuery ? "No favorites yet" : "No films found"}</div><div class="empty-sub">${S.filmFavoritesOnly && !S.filmQuery ? "Click the star next to a film to add it here." : "Try a different search."}</div></div>`;
+    return;
+  }
+  let html = "", brand = null;
+  shown.forEach((f) => {
+    if (f.brand !== brand) { brand = f.brand; html += `<div class="film-brand">${esc(brand)}</div>`; }
+    const full = filmFullName(f), on = isFavorite(full);
+    html += `
+      <div class="film-row">
+        <button class="star${on ? " on" : ""}" data-star="${esc(full)}" aria-pressed="${on}" aria-label="${on ? "Remove from favorites" : "Add to favorites"}: ${esc(full)}">${IC.star}</button>
+        <div class="film-name">${esc(f.name)}</div>
+        <div class="film-iso">ISO ${esc(f.iso)}</div>
+        <div class="film-type">${esc(f.type)}</div>
+      </div>`;
+  });
+  html += `<p class="film-note">Missing a film? You can type any film name in the Film field – it does not have to be on this list.</p>`;
+  box.innerHTML = html;
+}
+
+function toggleFavorite(name) {
+  const favs = S.store.favorites;
+  S.store.favorites = favs.includes(name) ? favs.filter((f) => f !== name) : [...favs, name];
+  renderFilmList();
+  saveStore();
+}
+
+// ── Suggestions under text fields (Film now, Camera and Lens later) ───────────
+let suggest = null;   // { input, items, active }
+
+function suggestionsFor(kind, text) {
+  const q = text.trim().toLowerCase();
+  if (kind === "film") return S.store.favorites.filter((f) => f.toLowerCase().includes(q) && f.toLowerCase() !== q);
+  return [];
+}
+
+function closeSuggest() {
+  document.querySelectorAll(".suggest").forEach((el) => el.remove());
+  suggest = null;
+}
+
+function openSuggest(input) {
+  const kind = input.dataset.suggest;
+  const items = suggestionsFor(kind, input.value);
+  closeSuggest();
+  const wrap = input.closest(".field-wrap");
+  if (!wrap) return;
+  const noFavorites = kind === "film" && !S.store.favorites.length && !input.value.trim();
+  if (!items.length && !noFavorites) return;
+
+  const box = document.createElement("div");
+  box.className = "suggest";
+  box.setAttribute("role", "listbox");
+  box.innerHTML = noFavorites
+    ? `<div class="suggest-empty">No favorites yet. Star films in the Films tab.</div>`
+    : items.map((it, i) => `<div class="suggest-item${i === 0 ? " active" : ""}" role="option" data-pick="${esc(it)}">${esc(it)}</div>`).join("");
+  wrap.appendChild(box);
+  suggest = { input, items, active: items.length ? 0 : -1 };
+}
+
+function moveSuggest(step) {
+  if (!suggest?.items.length) return;
+  suggest.active = (suggest.active + step + suggest.items.length) % suggest.items.length;
+  document.querySelectorAll(".suggest-item").forEach((el, i) => el.classList.toggle("active", i === suggest.active));
+}
+
+function pickSuggestion(value) {
+  const input = suggest.input;
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  closeSuggest();
+}
+
 // ── Tool dialogs ──────────────────────────────────────────────────────────────
 function openTool(id) {
   if (S.busy) return;
@@ -298,6 +433,7 @@ function closeModal() {
 }
 
 function renderModal() {
+  closeSuggest();
   const box = $("modal");
   if (!S.modal) { box.innerHTML = ""; return; }
   const m = {
@@ -343,7 +479,7 @@ function bodyMeta() {
       <label class="field-label" for="f-${id}">${label}</label>
       <div class="field-row">
         <span class="field-icon">${icon}</span>
-        <input id="f-${id}" data-model="meta.${id}" type="${type}" placeholder="${placeholder}" value="${esc(S.meta[id])}" autocomplete="off" spellcheck="false">
+        <input id="f-${id}" data-model="meta.${id}" ${id === "film" ? 'data-suggest="film"' : ""} type="${type}" placeholder="${placeholder}" value="${esc(S.meta[id])}" autocomplete="off" spellcheck="false">
       </div>
     </div>`;
   return `
@@ -371,7 +507,7 @@ function bodyRename() {
       <label class="field-label" for="f-r-${id}">${label}</label>
       <div class="field-row">
         <span class="field-icon">${icon}</span>
-        <input id="f-r-${id}" data-model="rename.${id}" type="${type}" placeholder="${placeholder}" value="${esc(S.rename[id])}" autocomplete="off" spellcheck="false">
+        <input id="f-r-${id}" data-model="rename.${id}" ${id === "film" ? 'data-suggest="film"' : ""} type="${type}" placeholder="${placeholder}" value="${esc(S.rename[id])}" autocomplete="off" spellcheck="false">
       </div>
     </div>`;
   return `
@@ -537,10 +673,12 @@ getCurrentWebview().onDragDropEvent((event) => {
 
 // ── Event wiring (one delegated listener for everything) ──────────────────────
 document.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-action],[data-tab],[data-tool],[data-insert],[data-sep],[data-remove]");
+  const t = e.target.closest("[data-action],[data-tab],[data-tool],[data-star],[data-insert],[data-sep],[data-remove]");
   if (!t || t.disabled) return;
   if (t.dataset.tab && t.dataset.tab !== S.tab) { S.tab = t.dataset.tab; render(); }
   if (t.dataset.tool) openTool(t.dataset.tool);
+  if (t.dataset.star) toggleFavorite(t.dataset.star);
+  if (t.dataset.action === "toggle-fav-filter") { S.filmFavoritesOnly = !S.filmFavoritesOnly; render(); }
   if (t.dataset.action === "pick-folder") pickFolder();
   if (t.dataset.action === "close-modal") closeModal();
   if (t.dataset.action === "confirm-modal") confirmModal();
@@ -551,13 +689,32 @@ document.addEventListener("click", (e) => {
 
 // Text fields write straight into the state (data-model="group.key")
 document.addEventListener("input", (e) => {
+  if (e.target.id === "film-search") { S.filmQuery = e.target.value; renderFilmList(); return; }
   const model = e.target.dataset?.model;
   if (!model) return;
   const [group, key] = model.split(".");
   S[group][key] = e.target.value;
   if (S.modal === "rename") renderPreview();
+  if (e.target.dataset.suggest) openSuggest(e.target);
 });
 
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+// Suggestion dropdown: show on focus, pick with the mouse (mousedown keeps the focus) or the keyboard
+document.addEventListener("focusin", (e) => { if (e.target.dataset?.suggest) openSuggest(e.target); });
+document.addEventListener("focusout", (e) => { if (e.target.dataset?.suggest) closeSuggest(); });
+document.addEventListener("mousedown", (e) => {
+  const item = e.target.closest("[data-pick]");
+  if (item && suggest) { e.preventDefault(); pickSuggestion(item.dataset.pick); }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (suggest) {
+    if (e.key === "ArrowDown") { e.preventDefault(); moveSuggest(1); return; }
+    if (e.key === "ArrowUp")   { e.preventDefault(); moveSuggest(-1); return; }
+    if (e.key === "Enter" && suggest.active >= 0) { e.preventDefault(); pickSuggestion(suggest.items[suggest.active]); return; }
+    if (e.key === "Escape")    { e.preventDefault(); closeSuggest(); return; }
+  }
+  if (e.key === "Escape") closeModal();
+});
 
 render();
+loadStore();

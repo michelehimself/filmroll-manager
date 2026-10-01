@@ -373,7 +373,9 @@ fn parse_film_iso(film: &str) -> Option<u16> {
     film.split(|c: char| c.is_whitespace() || c == '-' || c == '/')
         .rev()
         .filter_map(|token| {
+            // "800T" → 800, and one leading letter is fine too: "P3200", "E100"
             let digits = token.trim_end_matches(|c: char| c.is_ascii_alphabetic());
+            let digits = digits.strip_prefix(|c: char| c.is_ascii_alphabetic()).unwrap_or(digits);
             if digits.len() >= 2 && digits.chars().all(|c| c.is_ascii_digit()) {
                 digits.parse::<u16>().ok()
             } else {
@@ -599,6 +601,10 @@ mod tests {
         assert_eq!(parse_film_iso("Kodak Vision3 500T 5219"), Some(500));
         assert_eq!(parse_film_iso("Ilford HP5 Plus"), None);
         assert_eq!(parse_film_iso("Fomapan 100 Classic"), Some(100));
+        assert_eq!(parse_film_iso("Kodak T-Max P3200"), Some(3200));
+        assert_eq!(parse_film_iso("Kodak Ektachrome E100"), Some(100));
+        assert_eq!(parse_film_iso("Ilford FP4 Plus 125"), Some(125));
+        assert_eq!(parse_film_iso("Ilford HP5"), None);
     }
 
     #[test]
