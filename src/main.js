@@ -218,9 +218,8 @@ function updateEditBar() {
   });
   const note = $("sidebar-note");
   if (note) note.hidden = n === 0;
-  const folderTools = $("folder-tools"), openBtn = $("open-folder-btn");
-  if (folderTools) folderTools.hidden = n > 0;   // Rotate and Change Folder wait for Save or Discard
-  if (openBtn) openBtn.hidden = n > 0;           // and so does Open in Finder
+  const folderTools = $("folder-tools");
+  if (folderTools) folderTools.hidden = n > 0;   // Rotate, Open in Finder and Change Folder wait for Save or Discard
 }
 
 async function saveEdits() {
@@ -457,7 +456,7 @@ function viewExplorer() {
   return `
     <section class="explorer" id="dropzone">
       <div class="toolbar">
-        <div class="toolbar-folder">${IC.folder}<span class="name" title="${esc(S.folder)}">${esc(folderName(S.folder))}</span><span class="count" id="sel-count">${selectionText()}</span><button class="btn btn-ghost btn-small" id="open-folder-btn" data-action="open-folder">${FILE_MANAGER_LABEL}</button></div>
+        <div class="toolbar-folder">${IC.folder}<span class="name" title="${esc(S.folder)}">${esc(folderName(S.folder))}</span><span class="count" id="sel-count">${selectionText()}</span></div>
         <div class="toolbar-spacer"></div>
         <div class="editbar" id="editbar" hidden>
           <span class="editbar-text" id="edit-count"></span>
@@ -470,6 +469,8 @@ function viewExplorer() {
             <button class="btn btn-ghost square" data-rotate="ccw" title="Rotate counterclockwise" aria-label="Rotate selected files counterclockwise" disabled>${IC.rotateCcw}</button>
             <button class="btn btn-ghost square" data-rotate="cw" title="Rotate clockwise" aria-label="Rotate selected files clockwise" disabled>${IC.rotateCw}</button>
           </div>
+          <span class="tool-sep" aria-hidden="true"></span>
+          <button class="btn btn-ghost" data-action="open-folder">${FILE_MANAGER_LABEL}</button>
           <button class="btn btn-ghost" data-action="pick-folder">Change Folder…</button>
         </div>
       </div>
