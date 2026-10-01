@@ -27,15 +27,33 @@ const TITLE_TO_NEXT: f64 = 6.0;
 const LINE_TO_NEXT: f64 = 5.0;
 const LAST_BASELINE_TO_RULE: f64 = 4.0;
 const RULE_TO_GRID: f64 = 4.0;
-/// Where the grid starts at the earliest when there is a header (title and info line)
-const GRID_Y_WITH_HEADER: f64 = 32.0;
+// Film strip look. Everything is derived from the picture width, so it scales with the page.
+const FRAME_GAP_F: f64 = 0.055;       // space between two frames, as part of the picture width
+const PERFORATION_BAND_F: f64 = 0.10; // band with the sprocket holes, as part of the picture width
+const PLAIN_BAND_F: f64 = 0.035;      // thin dark border for formats without sprocket holes (medium format)
+const STRIP_TEXT_ROW: f64 = 2.8;      // row for the edge print (frame numbers), in mm
+const STRIP_GAP: f64 = 2.5;           // space between two strips, in mm
+const EDGE_PT: f64 = 6.0;
+const HOLES_PER_FRAME: f64 = 8.0;
 /// Picture size inside the PDF: sharp enough for print, small enough to stay a light file
 const PDF_PICTURE_PX: u32 = 640;
 const PDF_PICTURE_QUALITY: u8 = 85;
 
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SheetStyle {
+    /// Pictures in a clean grid, number below each one
+    #[default]
+    Grid,
+    /// Every row looks like a strip of film
+    Strip,
+}
+
 #[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetOptions {
+    #[serde(default)]
+    style: SheetStyle,
     landscape: bool,
     /// `None` = choose automatically
     columns: Option<u32>,
@@ -50,6 +68,31 @@ pub struct SheetOptions {
 pub struct CellPos {
     x: f64,
     y: f64,
+}
+
+/// One row in the film strip look.
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Strip {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    frames: usize,
+}
+
+/// How a strip is built; the same for every strip. Positions are relative to the strip's top left corner.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct StripSpec {
+    perforated: bool,
+    hole_w: f64,
+    hole_h: f64,
+    hole_pitch: f64,
+    top_hole_y: f64,
+    bottom_hole_y: f64,
+    /// Distance from the bottom edge of a picture to the baseline of the edge print
+    text_offset: f64,
+    text_pt: f64,
 }
 
 /// Everything in millimetres, measured from the top left corner of the page.
@@ -69,12 +112,17 @@ pub struct Layout {
     title_pt: f64,
     subtitle_pt: f64,
     label_pt: f64,
+    style: SheetStyle,
     cols: usize,
     rows: usize,
     box_w: f64,
     box_h: f64,
     label_h: f64,
+    /// Where each picture box is
     cells: Vec<CellPos>,
+    /// Film strip look only
+    strips: Vec<Strip>,
+    strip_spec: Option<StripSpec>,
 }
 
 // ───────────────────────────── Layout ─────────────────────────────
@@ -101,16 +149,30 @@ fn box_width(n: usize, cols: usize, grid_w: f64, grid_h: f64, aspect: f64) -> f6
     by_width.min(by_height)
 }
 
-fn choose_columns(n: usize, grid_w: f64, grid_h: f64, aspect: f64) -> usize {
+fn choose_columns(n: usize, width_for: impl Fn(usize) -> f64) -> usize {
     let best = (1..=n)
-        .map(|c| (c, box_width(n, c, grid_w, grid_h, aspect)))
+        .map(|c| (c, width_for(c)))
         .fold((1, f64::MIN), |a, b| if b.1 > a.1 { b } else { a });
     // A strip of film has 6 frames, so 6 per row looks familiar – unless that makes the pictures much smaller
-    if n >= 6 && box_width(n, 6, grid_w, grid_h, aspect) >= 0.8 * best.1 {
+    if n >= 6 && width_for(6) >= 0.8 * best.1 {
         6
     } else {
         best.0
     }
+}
+
+/// (height of the sprocket band as part of the picture width, has sprocket holes)
+fn strip_band(aspect: f64) -> (f64, bool) {
+    if aspect >= 1.4 { (PERFORATION_BAND_F, true) } else { (PLAIN_BAND_F, false) }   // 35 mm has holes, 120 film has none
+}
+
+/// Picture width in the film strip look: every strip has to fit across and all strips down the page.
+fn strip_box_width(n: usize, cols: usize, grid_w: f64, grid_h: f64, aspect: f64) -> f64 {
+    let rows = n.div_ceil(cols);
+    let (band, _) = strip_band(aspect);
+    let by_width = grid_w / (cols as f64 * (1.0 + FRAME_GAP_F));
+    let by_height = ((grid_h - (rows - 1) as f64 * STRIP_GAP) / rows as f64 - STRIP_TEXT_ROW) / (1.0 / aspect + 2.0 * band);
+    by_width.min(by_height)
 }
 
 pub fn layout(aspects: &[f64], options: &SheetOptions) -> Layout {
@@ -142,25 +204,9 @@ pub fn layout(aspects: &[f64], options: &SheetOptions) -> Layout {
 
     let n = aspects.len().max(1);
     let aspect = box_aspect(aspects);
-    let cols = match options.columns {
-        Some(c) if c >= 1 => (c as usize).min(n),
-        _ => choose_columns(n, grid_w, grid_h, aspect),
-    };
-    let rows = n.div_ceil(cols);
-    let box_w = box_width(n, cols, grid_w, grid_h, aspect).max(1.0);
-    let box_h = box_w / aspect;
+    let wanted_cols = options.columns.filter(|c| *c >= 1).map(|c| (c as usize).min(n));
 
-    // Centre the rows horizontally, start right below the header
-    let used_w = cols as f64 * box_w + (cols - 1) as f64 * GAP;
-    let left = grid_x + (grid_w - used_w).max(0.0) / 2.0;
-    let cells = (0..aspects.len())
-        .map(|i| CellPos {
-            x: left + (i % cols) as f64 * (box_w + GAP),
-            y: grid_y + (i / cols) as f64 * (box_h + LABEL_H + GAP),
-        })
-        .collect();
-
-    Layout {
+    let mut layout = Layout {
         page_w,
         page_h,
         margin: MARGIN,
@@ -173,13 +219,70 @@ pub fn layout(aspects: &[f64], options: &SheetOptions) -> Layout {
         title_pt: TITLE_PT,
         subtitle_pt: SUBTITLE_PT,
         label_pt: LABEL_PT,
-        cols,
-        rows,
-        box_w,
-        box_h,
+        style: options.style,
+        cols: 1,
+        rows: 1,
+        box_w: 1.0,
+        box_h: 1.0,
         label_h: LABEL_H,
-        cells,
+        cells: Vec::new(),
+        strips: Vec::new(),
+        strip_spec: None,
+    };
+
+    match options.style {
+        SheetStyle::Grid => {
+            let cols = wanted_cols.unwrap_or_else(|| choose_columns(n, |c| box_width(n, c, grid_w, grid_h, aspect)));
+            let box_w = box_width(n, cols, grid_w, grid_h, aspect).max(1.0);
+            let box_h = box_w / aspect;
+
+            // Centre the rows horizontally, start right below the header
+            let used_w = cols as f64 * box_w + (cols - 1) as f64 * GAP;
+            let left = grid_x + (grid_w - used_w).max(0.0) / 2.0;
+            layout.cells = (0..aspects.len())
+                .map(|i| CellPos {
+                    x: left + (i % cols) as f64 * (box_w + GAP),
+                    y: grid_y + (i / cols) as f64 * (box_h + LABEL_H + GAP),
+                })
+                .collect();
+            (layout.cols, layout.rows, layout.box_w, layout.box_h) = (cols, n.div_ceil(cols), box_w, box_h);
+        }
+        SheetStyle::Strip => {
+            let cols = wanted_cols.unwrap_or_else(|| choose_columns(n, |c| strip_box_width(n, c, grid_w, grid_h, aspect)));
+            let box_w = strip_box_width(n, cols, grid_w, grid_h, aspect).max(1.0);
+            let box_h = box_w / aspect;
+            let (band_f, perforated) = strip_band(aspect);
+            let band = band_f * box_w;
+            let frame_gap = FRAME_GAP_F * box_w;
+            let pitch = box_w + frame_gap;
+            let strip_h = band + box_h + STRIP_TEXT_ROW + band;
+            let left = grid_x + (grid_w - cols as f64 * pitch).max(0.0) / 2.0;
+            let rows = n.div_ceil(cols);
+
+            for row in 0..rows {
+                let frames = (aspects.len() - row * cols).min(cols);
+                let (y, x) = (grid_y + row as f64 * (strip_h + STRIP_GAP), left);
+                layout.strips.push(Strip { x, y, w: frames as f64 * pitch, h: strip_h, frames });
+                for c in 0..frames {
+                    layout.cells.push(CellPos { x: x + frame_gap / 2.0 + c as f64 * pitch, y: y + band });
+                }
+            }
+            let hole_pitch = pitch / HOLES_PER_FRAME;
+            let hole_h = 0.55 * band;
+            layout.strip_spec = Some(StripSpec {
+                perforated,
+                hole_w: 0.6 * hole_pitch,
+                hole_h,
+                hole_pitch,
+                top_hole_y: (band - hole_h) / 2.0,
+                bottom_hole_y: strip_h - band + (band - hole_h) / 2.0,
+                text_offset: STRIP_TEXT_ROW * 0.72,
+                text_pt: EDGE_PT,
+            });
+            (layout.cols, layout.rows, layout.box_w, layout.box_h, layout.label_h) = (cols, rows, box_w, box_h, 0.0);
+        }
     }
+    layout
 }
 
 // ───────────────────────────── PDF ─────────────────────────────
@@ -223,6 +326,21 @@ fn fit_text(text: &str, size_pt: f64, max_pt: f64) -> String {
 
 fn pt(mm: f64) -> f32 {
     (mm * MM_TO_PT) as f32
+}
+
+/// Rectangle with rounded corners (the sprocket holes), as a path ready to be filled.
+fn rounded_rect(c: &mut Content, x: f32, y: f32, w: f32, h: f32, r: f32) {
+    let k = 0.5523 * r;
+    c.move_to(x + r, y);
+    c.line_to(x + w - r, y);
+    c.cubic_to(x + w - r + k, y, x + w, y + r - k, x + w, y + r);
+    c.line_to(x + w, y + h - r);
+    c.cubic_to(x + w, y + h - r + k, x + w - r + k, y + h, x + w - r, y + h);
+    c.line_to(x + r, y + h);
+    c.cubic_to(x + r - k, y + h, x, y + h - r + k, x, y + h - r);
+    c.line_to(x, y + r);
+    c.cubic_to(x, y + r - k, x + r - k, y, x + r, y);
+    c.close_path();
 }
 
 struct Picture {
@@ -303,10 +421,31 @@ fn build_pdf(layout: &Layout, options: &SheetOptions, names: &[String], pictures
         c.stroke();
     }
 
+    // Film strip look: a dark strip behind every row, sprocket holes along the edges
+    if let (SheetStyle::Strip, Some(spec)) = (layout.style, &layout.strip_spec) {
+        for strip in &layout.strips {
+            c.set_fill_gray(0.1);
+            c.rect(pt(strip.x), y_up(strip.y + strip.h), pt(strip.w), pt(strip.h));
+            c.fill_nonzero();
+            if spec.perforated {
+                c.set_fill_gray(1.0);
+                for k in 0..(strip.frames as f64 * HOLES_PER_FRAME) as usize {
+                    let x = strip.x + (k as f64 + 0.5) * spec.hole_pitch - spec.hole_w / 2.0;
+                    for hole_y in [spec.top_hole_y, spec.bottom_hole_y] {
+                        let y = strip.y + hole_y;
+                        rounded_rect(&mut c, pt(x), y_up(y + spec.hole_h), pt(spec.hole_w), pt(spec.hole_h), pt(spec.hole_h * 0.25));
+                        c.fill_nonzero();
+                    }
+                }
+            }
+        }
+    }
+
     let digits = names.len().to_string().len().max(2);
+    let is_strip = layout.style == SheetStyle::Strip;
     for (i, (cell, picture)) in layout.cells.iter().zip(pictures).enumerate() {
-        // Light grey box, the picture fitted inside it (portrait and landscape both stay visible)
-        c.set_fill_gray(0.93);
+        // The box behind the picture (letterbox), the picture fitted inside it so portrait and landscape both stay visible
+        c.set_fill_gray(if is_strip { 0.04 } else { 0.93 });
         c.rect(pt(cell.x), y_up(cell.y + layout.box_h), pt(layout.box_w), pt(layout.box_h));
         c.fill_nonzero();
 
@@ -318,17 +457,36 @@ fn build_pdf(layout: &Layout, options: &SheetOptions, names: &[String], pictures
         c.x_object(Name(image_names[i].as_bytes()));
         c.restore_state();
 
-        // Frame number (and file name) centred below the picture
-        let number = format!("{:0digits$}", i + 1);
-        let label = if options.show_names { format!("{number}  {}", names[i]) } else { number };
-        let label = fit_text(&label, layout.label_pt, layout.box_w * MM_TO_PT);
-        let left = (cell.x + layout.box_w / 2.0) * MM_TO_PT - text_width_pt(&label, layout.label_pt) / 2.0;
-        c.begin_text();
-        c.set_fill_gray(0.3);
-        c.set_font(Name(b"F1"), layout.label_pt as f32);
-        c.next_line(left as f32, y_up(cell.y + layout.box_h + 3.1));
-        c.show(Str(&win_ansi(&label)));
-        c.end_text();
+        if let (true, Some(spec)) = (is_strip, &layout.strip_spec) {
+            // Edge print like on real film: the frame number at the start, "12A" at the end
+            let baseline = y_up(cell.y + layout.box_h + spec.text_offset);
+            let number = format!("{}", i + 1);
+            let end = format!("{number}A");
+            c.set_fill_rgb(0.93, 0.68, 0.25);
+            c.begin_text();
+            c.set_font(Name(b"F1"), spec.text_pt as f32);
+            c.next_line(pt(cell.x), baseline);
+            c.show(Str(number.as_bytes()));
+            c.end_text();
+            let right = (cell.x + layout.box_w) * MM_TO_PT - text_width_pt(&end, spec.text_pt);
+            c.begin_text();
+            c.set_font(Name(b"F1"), spec.text_pt as f32);
+            c.next_line(right as f32, baseline);
+            c.show(Str(end.as_bytes()));
+            c.end_text();
+        } else {
+            // Frame number (and file name) centred below the picture
+            let number = format!("{:0digits$}", i + 1);
+            let label = if options.show_names { format!("{number}  {}", names[i]) } else { number };
+            let label = fit_text(&label, layout.label_pt, layout.box_w * MM_TO_PT);
+            let left = (cell.x + layout.box_w / 2.0) * MM_TO_PT - text_width_pt(&label, layout.label_pt) / 2.0;
+            c.begin_text();
+            c.set_fill_gray(0.3);
+            c.set_font(Name(b"F1"), layout.label_pt as f32);
+            c.next_line(left as f32, y_up(cell.y + layout.box_h + 3.1));
+            c.show(Str(&win_ansi(&label)));
+            c.end_text();
+        }
     }
 
     pdf.stream(content_id, &c.finish());
@@ -397,7 +555,7 @@ mod tests {
 
     fn options() -> SheetOptions {
         SheetOptions {
-            landscape: false, columns: None, show_names: false,
+            style: SheetStyle::Grid, landscape: false, columns: None, show_names: false,
             title: "Roll 12".into(), subtitle: "Kodak Portra 400 · Pentax 17".into(),
             scanned_at: String::new(),
         }
@@ -423,7 +581,7 @@ mod tests {
         assert_eq!((layout.page_w, layout.page_h), (210.0, 297.0));
         assert_eq!(layout.cells.len(), 36);
         assert_fits(&layout);
-        assert!(layout.cells[0].y >= GRID_Y_WITH_HEADER);   // below the header
+        assert!(layout.cells[0].y >= 32.0);   // below the header
     }
 
     #[test]
@@ -478,6 +636,56 @@ mod tests {
         assert_fits(&only);
     }
 
+    fn strip_options() -> SheetOptions {
+        SheetOptions { style: SheetStyle::Strip, ..options() }
+    }
+
+    #[test]
+    fn film_strips_are_rows_with_frames_inside() {
+        for landscape in [false, true] {
+            for n in [1, 5, 6, 7, 12, 36, 72] {
+                let mut o = strip_options();
+                o.landscape = landscape;
+                let l = layout(&vec![1.5; n], &o);
+                let spec = l.strip_spec.as_ref().unwrap();
+                assert!(spec.perforated);
+                assert_eq!(l.cells.len(), n);
+                assert_eq!(l.strips.iter().map(|s| s.frames).sum::<usize>(), n);
+                for strip in &l.strips {
+                    assert!(strip.x >= l.margin - 0.001 && strip.x + strip.w <= l.page_w - l.margin + 0.001, "strip sticks out sideways");
+                    assert!(strip.y + strip.h <= l.page_h - l.margin + 0.001, "strip sticks out at the bottom ({n} frames, landscape {landscape})");
+                }
+                // Every picture sits inside "its" strip and no two pictures overlap
+                let mut index = 0;
+                for strip in &l.strips {
+                    for _ in 0..strip.frames {
+                        let c = &l.cells[index];
+                        assert!(c.x >= strip.x && c.x + l.box_w <= strip.x + strip.w + 0.001);
+                        assert!(c.y >= strip.y && c.y + l.box_h <= strip.y + strip.h);
+                        index += 1;
+                    }
+                }
+                for (i, a) in l.cells.iter().enumerate() {
+                    for b in &l.cells[i + 1..] {
+                        assert!((a.x - b.x).abs() >= l.box_w - 0.001 || (a.y - b.y).abs() >= l.box_h - 0.001, "pictures overlap");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn film_strip_of_36_has_six_strips_and_medium_format_has_no_holes() {
+        let l = layout(&[1.5; 36], &strip_options());
+        assert_eq!((l.cols, l.rows, l.strips.len()), (6, 6, 6));
+        let spec = l.strip_spec.unwrap();
+        assert!(spec.hole_w > 0.0 && spec.hole_h < spec.top_hole_y * 4.0 + spec.hole_h);
+        assert!(spec.bottom_hole_y > spec.top_hole_y);
+
+        let square = layout(&[1.0; 12], &strip_options());
+        assert!(!square.strip_spec.unwrap().perforated);
+    }
+
     #[test]
     fn no_header_means_more_room() {
         let mut o = options();
@@ -485,7 +693,7 @@ mod tests {
         o.subtitle = "".into();
         let l = layout(&[1.5; 36], &o);
         assert!(!l.has_header);
-        assert!(l.cells[0].y < GRID_Y_WITH_HEADER);
+        assert!(l.cells[0].y < 32.0);
     }
 
     #[test]
@@ -518,7 +726,12 @@ mod tests {
         o.landscape = true;
         o.show_names = false;
         save_in(&dir, None, &o, &dir.join("landscape.pdf"), &|_| {}).unwrap();
-        for name in ["portrait.pdf", "landscape.pdf"] {
+        o.landscape = false;
+        o.style = SheetStyle::Strip;
+        save_in(&dir, None, &o, &dir.join("strip.pdf"), &|_| {}).unwrap();
+        o.landscape = true;
+        save_in(&dir, None, &o, &dir.join("strip_landscape.pdf"), &|_| {}).unwrap();
+        for name in ["portrait.pdf", "landscape.pdf", "strip.pdf", "strip_landscape.pdf"] {
             let bytes = fs::read(dir.join(name)).unwrap();
             assert_eq!(String::from_utf8_lossy(&bytes).matches("/Subtype /Image").count(), 36);
         }
