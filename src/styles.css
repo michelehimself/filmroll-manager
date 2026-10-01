@@ -148,6 +148,9 @@ button { font-family: inherit; }
 .toolbar-folder .name  { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toolbar-folder .count { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 .toolbar-spacer { flex: 1; }
+.quick { display: flex; align-items: center; gap: 6px; margin-right: 6px; }
+.quick-label { font-size: 11px; font-weight: 600; color: var(--text-3); margin-right: 2px; }
+.btn.square { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 
 /* ── File list ──────────────────────────────────── */
 .filelist { flex: 1; min-height: 0; overflow: auto; }

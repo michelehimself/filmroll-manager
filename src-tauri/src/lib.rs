@@ -12,6 +12,7 @@ pub fn run() {
             processor::reverse_order,
             processor::write_metadata,
             processor::rename_files,
+            processor::rotate_images,
             reader::read_folder,
             reader::get_thumbnail,
             store::load_store,

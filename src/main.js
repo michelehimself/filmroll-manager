@@ -24,6 +24,8 @@ const IC = {
   cameraBig: svg(40, 1.3, CAMERA),
   film:      svg(15, 1.6, FILM),
   filmBig:   svg(40, 1.3, FILM),
+  rotateCw:  svg(16, 1.6, `<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>`),
+  rotateCcw: svg(16, 1.6, `<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>`),
   plus:      svg(15, 1.8, `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`),
   pencil:    svg(15, 1.6, `<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>`),
   trash:     svg(15, 1.6, `<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>`),
@@ -148,11 +150,11 @@ async function pickFolder() {
 }
 
 // Re-reads the folder after a tool changed the files (no loading screen)
-async function refreshFolder() {
+async function refreshFolder({ keepThumbnails = false } = {}) {
   S.files = await invoke("read_folder", { folder: S.folder });
   const names = new Set(S.files.map((f) => f.name));
   S.selected = new Set([...S.selected].filter((n) => names.has(n)));
-  resetThumbnails();
+  if (!keepThumbnails) resetThumbnails();
   render();
 }
 
@@ -186,6 +188,31 @@ function updateSelectionUI() {
   }
   const count = $("sel-count");
   if (count) count.textContent = selectionText();
+  updateQuickTools();
+}
+
+// Quick tools need a selection – they never act on the whole roll by accident
+function updateQuickTools() {
+  document.querySelectorAll("[data-rotate]").forEach((b) => { b.disabled = !S.selected.size || S.busy; });
+}
+
+async function rotateSelected(clockwise) {
+  if (!S.selected.size || S.busy) return;
+  const chosen = scopeFiles();
+  S.busy = true; S.error = null;
+  updateQuickTools();
+  try {
+    await invoke("rotate_images", { folder: S.folder, files: chosen.map((f) => f.name), clockwise });
+    // Only the turned pictures need new previews
+    chosen.forEach((f) => { const url = thumbUrls.get(f.path); if (url) { URL.revokeObjectURL(url); thumbUrls.delete(f.path); } });
+    S.busy = false;
+    await refreshFolder({ keepThumbnails: true });
+    showNotice(`${chosen.length} file${chosen.length === 1 ? "" : "s"} rotated ${clockwise ? "clockwise" : "counterclockwise"}.`);
+  } catch (e) {
+    S.busy = false;
+    S.error = String(e);
+    render();
+  }
 }
 
 function selectRow(name, event) {
@@ -337,6 +364,11 @@ function viewExplorer() {
       <div class="toolbar">
         <div class="toolbar-folder">${IC.folder}<span class="name" title="${esc(S.folder)}">${esc(folderName(S.folder))}</span><span class="count" id="sel-count">${selectionText()}</span></div>
         <div class="toolbar-spacer"></div>
+        <div class="quick" role="group" aria-label="Quick tools">
+          <span class="quick-label">Rotate</span>
+          <button class="btn btn-ghost square" data-rotate="ccw" title="Rotate counterclockwise" aria-label="Rotate selected files counterclockwise" disabled>${IC.rotateCcw}</button>
+          <button class="btn btn-ghost square" data-rotate="cw" title="Rotate clockwise" aria-label="Rotate selected files clockwise" disabled>${IC.rotateCw}</button>
+        </div>
         <button class="btn btn-ghost" data-action="pick-folder">Change Folder…</button>
       </div>
       ${error}
@@ -845,10 +877,11 @@ document.addEventListener("click", (e) => {
   // File list: click a row to select, Cmd/Ctrl-click to add, Shift-click for a range
   const row = e.target.closest(".row.file");
   if (row && !e.target.closest("input, button")) { selectRow(row.dataset.row, e); return; }
-  const t = e.target.closest("[data-action],[data-tab],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
+  const t = e.target.closest("[data-action],[data-rotate],[data-tab],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
   if (!t || t.disabled) return;
   if (t.dataset.tab && t.dataset.tab !== S.tab) { S.tab = t.dataset.tab; render(); }
   if (t.dataset.tool) openTool(t.dataset.tool);
+  if (t.dataset.rotate) rotateSelected(t.dataset.rotate === "cw");
   if (t.dataset.star) toggleFavorite(t.dataset.star);
   if (t.dataset.action === "gear-add") addGear(t.dataset.kind);
   if (t.dataset.gearEdit) { gearEdit = { kind: t.dataset.gearEdit, name: t.dataset.name }; renderGearLists(); }

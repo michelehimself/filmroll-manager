@@ -500,6 +500,61 @@ fn rename_in(
     }
 }
 
+
+// ───────────────────────────── Rotate ─────────────────────────────
+
+/// The orientation stored in the EXIF block (1 = normal if nothing is stored).
+pub(crate) fn read_orientation(exif: &Metadata) -> u16 {
+    match exif.get_tag(&ExifTag::Orientation(vec![])).next() {
+        Some(ExifTag::Orientation(values)) => values.first().copied().filter(|v| (1..=8).contains(v)).unwrap_or(1),
+        _ => 1,
+    }
+}
+
+/// EXIF orientation after turning the picture by a quarter turn.
+/// Pairs are (before, after) for a clockwise turn; mirrored orientations (2, 4, 5, 7) work too.
+fn rotated_orientation(current: u16, clockwise: bool) -> u16 {
+    const CLOCKWISE: [(u16, u16); 8] = [(1, 6), (6, 3), (3, 8), (8, 1), (2, 7), (7, 4), (4, 5), (5, 2)];
+    let current = if (1..=8).contains(&current) { current } else { 1 };
+    CLOCKWISE
+        .iter()
+        .find(|(before, after)| if clockwise { *before == current } else { *after == current })
+        .map(|(before, after)| if clockwise { *after } else { *before })
+        .unwrap_or(1)
+}
+
+/// Quick tool – turns the chosen pictures by a quarter turn.
+/// Only the Orientation tag changes; the image data stays byte-identical.
+#[tauri::command]
+pub async fn rotate_images(
+    app: AppHandle,
+    folder: String,
+    files: Vec<String>,
+    clockwise: bool,
+) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        rotate_in(Path::new(&folder), &files, clockwise, &|v| emit_progress(&app, v))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn rotate_in(folder: &Path, only: &[String], clockwise: bool, progress: &dyn Fn(f64)) -> Result<usize, String> {
+    let files = select_images(folder, Some(only))?;
+    let total = files.len().max(1) as f64;
+    for (i, file) in files.iter().enumerate() {
+        let mut exif = Metadata::new_from_path(file).unwrap_or_else(|_| Metadata::new());
+        // Without the required EXIF fields Apple Photos would ignore the orientation, too
+        add_required_exif_fields(&mut exif, file);
+        let next = rotated_orientation(read_orientation(&exif), clockwise);
+        exif.set_tag(ExifTag::Orientation(vec![next]));
+        exif.write_to_file(file)
+            .map_err(|e| format!("\"{}\": {e}", file_name(file)))?;
+        progress((i + 1) as f64 / total);
+    }
+    Ok(files.len())
+}
+
 // ───────────────────────────── Tests ─────────────────────────────
 // Run with:  cargo test   (inside src-tauri)
 
@@ -725,5 +780,53 @@ mod tests {
         let only = strings(&["nope.jpg"]);
         assert!(select_images(&dir, Some(&only)).is_err());
         assert!(select_images(&dir, Some(&[])).is_err());
+    }
+
+    #[test]
+    fn rotation_table_matches_the_image_library() {
+        // 2×3 picture with six different pixels, so every flip or turn is visible
+        let base = image::RgbImage::from_fn(2, 3, |x, y| image::Rgb([(x * 40 + y * 10) as u8, y as u8, x as u8]));
+        let shown = |orientation: u16| {
+            let mut img = image::DynamicImage::ImageRgb8(base.clone());
+            img.apply_orientation(image::metadata::Orientation::from_exif(orientation as u8).unwrap());
+            img.to_rgb8()
+        };
+        for orientation in 1..=8u16 {
+            let turned = image::DynamicImage::ImageRgb8(shown(orientation)).rotate90().to_rgb8();
+            assert_eq!(shown(rotated_orientation(orientation, true)), turned, "clockwise from {orientation}");
+            let back = rotated_orientation(rotated_orientation(orientation, true), false);
+            assert_eq!(back, orientation, "counterclockwise undoes clockwise ({orientation})");
+        }
+        assert_eq!(rotated_orientation(0, true), 6);   // missing or invalid counts as normal
+        assert_eq!(rotated_orientation(1, false), 8);
+    }
+
+    #[test]
+    fn rotate_changes_only_the_orientation() {
+        let dir = roll("rotate", 3);
+        let meta = MetadataInput {
+            camera: "Canon AE-1".into(), lens: "50mm f/1.4".into(), film: "Kodak Gold 200".into(),
+            date: "2026-05-01".into(), time: "21:00".into(),
+        };
+        write_metadata_in(&dir, None, &meta, &|_| {}).unwrap();
+        let before = fs::read(dir.join("scan_2.jpg")).unwrap();
+
+        let only = strings(&["scan_2.jpg"]);
+        assert_eq!(rotate_in(&dir, &only, true, &|_| {}).unwrap(), 1);
+        let orientation = |n: &str| read_orientation(&Metadata::new_from_path(&dir.join(n)).unwrap());
+        assert_eq!(orientation("scan_2.jpg"), 6);
+        assert_eq!(orientation("scan_1.jpg"), 1);   // not selected
+        rotate_in(&dir, &only, true, &|_| {}).unwrap();
+        assert_eq!(orientation("scan_2.jpg"), 3);
+        rotate_in(&dir, &only, false, &|_| {}).unwrap();
+        assert_eq!(orientation("scan_2.jpg"), 6);
+
+        // everything else survives: image frame, camera, film label
+        let after = fs::read(dir.join("scan_2.jpg")).unwrap();
+        assert_eq!(frame_id(&dir.join("scan_2.jpg")), "frame002");
+        assert!(String::from_utf8_lossy(&after).contains(r#"xmp:Label="Kodak Gold 200""#));
+        let exif = Metadata::new_from_path(&dir.join("scan_2.jpg")).unwrap();
+        assert_eq!(exif.get_tag(&ExifTag::Model(String::new())).next().unwrap(), &ExifTag::Model("Canon AE-1".into()));
+        assert!(after.len().abs_diff(before.len()) < 64);
     }
 }

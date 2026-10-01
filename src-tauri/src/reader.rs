@@ -1,7 +1,7 @@
 //! Read-only access for the file list: what is already written in each image,
 //! and small preview pictures. Nothing here ever changes a file.
 
-use crate::processor::{collect_images, file_name, is_jpeg, XMP_HEADER};
+use crate::processor::{collect_images, file_name, is_jpeg, read_orientation, XMP_HEADER};
 use img_parts::jpeg::{markers, Jpeg};
 use img_parts::Bytes;
 use little_exif::exif_tag::ExifTag;
@@ -104,7 +104,13 @@ fn read_info(path: &Path) -> FileInfo {
 fn make_thumbnail(path: &Path) -> Result<Vec<u8>, String> {
     let image = image::open(path)
         .map_err(|e| format!("Could not read \"{}\": {e}", file_name(path)))?;
-    let small = image.thumbnail(THUMBNAIL_SIZE, THUMBNAIL_SIZE).to_rgb8();
+    let mut small = image.thumbnail(THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+    // Show the picture the way it is meant to be seen (after Rotate, for example)
+    let orientation = Metadata::new_from_path(path).map(|exif| read_orientation(&exif)).unwrap_or(1);
+    if let Some(turn) = image::metadata::Orientation::from_exif(orientation as u8) {
+        small.apply_orientation(turn);
+    }
+    let small = small.to_rgb8();
     let mut bytes = Vec::new();
     small
         .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Jpeg)
