@@ -605,7 +605,7 @@ function viewGear() {
         </div>
       </div>
       <div id="store-error">${S.storeError ? `<div class="error-banner" role="alert">${esc(S.storeError)}</div>` : ""}</div>
-      <div class="page-scroll"><div class="gear-grid">${col("cameras")}${col("lenses")}</div></div>
+      <div class="page-scroll fill"><div class="gear-grid">${col("cameras")}${col("lenses")}</div></div>
     </div>`;
 }
 

@@ -279,9 +279,12 @@ button { font-family: inherit; }
 
 /* Gear page */
 .gear-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: stretch; }
+.page-scroll.fill { display: flex; flex-direction: column; padding-bottom: 0; }
+.gear-grid { flex: 1; }
+/* The cards run down to the bottom edge of the window */
 .gear-col {
-  min-width: 0; background: var(--surface); border: 1px solid var(--border-soft);
-  border-radius: 12px; padding: 18px 20px 12px;
+  min-width: 0; background: var(--surface); border: 1px solid var(--border-soft); border-bottom: none;
+  border-radius: 12px 12px 0 0; padding: 18px 20px 12px;
 }
 .gear-title { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
 .gear-add { display: flex; gap: 8px; }
