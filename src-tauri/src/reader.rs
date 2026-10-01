@@ -11,6 +11,8 @@ use std::fs;
 use std::path::Path;
 
 const THUMBNAIL_SIZE: u32 = 200;
+/// Big enough to judge a picture on a large screen, small enough to load quickly
+const PREVIEW_SIZE: u32 = 1600;
 
 #[derive(Serialize, Debug, Default, PartialEq)]
 pub struct FileInfo {
@@ -124,7 +126,8 @@ fn read_info(path: &Path) -> FileInfo {
 pub(crate) fn make_thumbnail_sized(path: &Path, size: u32, quality: u8) -> Result<(Vec<u8>, u32, u32), String> {
     let image = image::open(path)
         .map_err(|e| format!("Could not read \"{}\": {e}", file_name(path)))?;
-    let mut small = image.thumbnail(size, size);
+    // Only ever scale down; a picture that is already small stays as it is
+    let mut small = if image.width() > size || image.height() > size { image.thumbnail(size, size) } else { image };
     // Show the picture the way it is meant to be seen (after Rotate, for example)
     let orientation = Metadata::new_from_path(path).map(|exif| read_orientation(&exif)).unwrap_or(1);
     if let Some(turn) = image::metadata::Orientation::from_exif(orientation as u8) {
@@ -165,6 +168,17 @@ pub async fn get_thumbnail(path: String) -> Result<tauri::ipc::Response, String>
         .await
         .map_err(|e| e.to_string())?
         .map(tauri::ipc::Response::new)
+}
+
+/// Large preview picture for the quick look (Space bar), as raw JPEG bytes.
+#[tauri::command]
+pub async fn get_preview(path: String) -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        make_thumbnail_sized(Path::new(&path), PREVIEW_SIZE, 88).map(|(bytes, _, _)| bytes)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map(tauri::ipc::Response::new)
 }
 
 /// Shows the folder in Finder / Explorer / the Linux file manager. Changes nothing.
@@ -243,6 +257,22 @@ mod tests {
         let dir = tiny_jpeg_folder("thumb", 1);
         let bytes = make_thumbnail(&dir.join("scan_1.jpg")).unwrap();
         assert_eq!(&bytes[..2], &[0xFF, 0xD8]);
+    }
+
+    #[test]
+    fn preview_is_large_but_never_larger_than_the_limit() {
+        let dir = std::env::temp_dir().join("filmroll_reader_preview");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("big.jpg");
+        image::RgbImage::from_pixel(3000, 2000, image::Rgb([90, 140, 200])).save(&path).unwrap();
+        let (bytes, width, height) = make_thumbnail_sized(&path, PREVIEW_SIZE, 88).unwrap();
+        assert_eq!((width, height), (1600, 1067));
+        assert_eq!(&bytes[..2], &[0xFF, 0xD8]);
+        // a small picture is not blown up
+        image::RgbImage::from_pixel(400, 300, image::Rgb([1, 2, 3])).save(dir.join("small.jpg")).unwrap();
+        let (_, width, _) = make_thumbnail_sized(&dir.join("small.jpg"), PREVIEW_SIZE, 88).unwrap();
+        assert_eq!(width, 400);
     }
 
     #[test]

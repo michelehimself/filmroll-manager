@@ -17,6 +17,7 @@ pub fn run() {
             processor::write_edits,
             reader::read_folder,
             reader::get_thumbnail,
+            reader::get_preview,
             reader::open_folder,
             sheet::contact_sheet_layout,
             sheet::save_contact_sheet,
