@@ -56,11 +56,13 @@ const TABS = [
 
 // `ready: false` tools are shown but cannot be used yet
 const TOOLS = [
-  { id: "reverse", title: "Reverse Order",     desc: "Flip the frame order",      icon: IC.reverse, ready: true },
-  { id: "meta",    title: "Bulk Edit Meta Data", desc: "Camera, lens, film, date", icon: IC.meta,    ready: true },
-  { id: "rename",  title: "Bulk Rename",       desc: "Build new file names",      icon: IC.rename,  ready: true },
-  { id: "sheet",   title: "Create Contact Sheet", desc: "Printable A4 overview (PDF)", icon: IC.sheet, ready: true },
+  { id: "reverse", section: "actions", title: "Reverse Order",     desc: "Flip the frame order",      icon: IC.reverse, ready: true },
+  { id: "meta",    section: "actions", title: "Bulk Edit Meta Data", desc: "Camera, lens, film, date", icon: IC.meta,    ready: true },
+  { id: "rename",  section: "actions", title: "Bulk Rename",       desc: "Build new file names",      icon: IC.rename,  ready: true },
+  { id: "sheet",   section: "tools",   title: "Create Contact Sheet", desc: "Printable A4 overview (PDF)", icon: IC.sheet, ready: true },
 ];
+// Sidebar sections, in this order: "Actions" change your files, "Tools" make something new from them
+const SECTIONS = [["actions", "Actions"], ["tools", "Tools"]];
 
 // ── Template tags (Bulk Rename) ───────────────────────────────────────────────
 const TAGS = {
@@ -626,13 +628,15 @@ function viewManager() {
 }
 
 function viewSidebar() {
-  const tiles = TOOLS.map((t) => `
+  const tile = (t) => `
     <button class="tool" data-tool="${t.id}" ${t.ready && S.folder && !hasEdits() ? "" : "disabled"}>
       <span class="tool-icon">${t.icon}</span>
       <span class="tool-text"><div class="tool-title">${t.title}</div><div class="tool-desc">${t.desc}</div></span>
       ${t.soon ? `<span class="tool-badge">Soon</span>` : ""}
-    </button>`).join("");
-  return `<aside class="sidebar"><div class="sidebar-head">Tools</div>${tiles}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p>${S.folder ? `<p class="sidebar-hint"><span class="keycap">Space</span> Press to enlarge the selected picture</p>` : ""}</aside>`;
+    </button>`;
+  const sections = SECTIONS.map(([id, label]) =>
+    `<div class="sidebar-section"><div class="sidebar-head">${label}</div>${TOOLS.filter((t) => t.section === id).map(tile).join("")}</div>`).join("");
+  return `<aside class="sidebar">${sections}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p>${S.folder ? `<p class="sidebar-hint"><span class="keycap">Space</span> Press to enlarge the selected picture</p>` : ""}</aside>`;
 }
 
 function viewDropArea() {
