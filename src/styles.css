@@ -307,10 +307,11 @@ button { font-family: inherit; }
 .suggest {
   position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; z-index: 5;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px; max-height: 200px; overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px; max-height: 240px; overflow-y: auto;
 }
 .suggest-item { padding: 7px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
 .suggest-item:hover, .suggest-item.active { background: var(--accent-soft); color: var(--accent); }
+.suggest-sep { height: 1px; background: var(--border-soft); margin: 4px 6px; }
 .suggest-empty { padding: 8px 10px; font-size: 12px; color: var(--text-3); }
 
 /* ── Dialogs ────────────────────────────────────── */

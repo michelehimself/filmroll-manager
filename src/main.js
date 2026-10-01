@@ -645,10 +645,23 @@ function finishRename(input, save) {
 // ── Suggestions under text fields (Film now, Camera and Lens later) ───────────
 let suggest = null;   // { input, items, active }
 
+// Returns the suggestions plus how many of them come first as "favorites"
+// (those are separated from the rest by a thin line).
 function suggestionsFor(kind, text) {
   const q = text.trim().toLowerCase();
-  const list = kind === "film" ? S.store.favorites : kind === "camera" ? sortedGear("cameras") : kind === "lens" ? sortedGear("lenses") : [];
-  return list.filter((f) => f.toLowerCase().includes(q) && f.toLowerCase() !== q);
+  const words = q.split(/\s+/).filter(Boolean);
+  const matches = (name) => name.toLowerCase() !== q && words.every((w) => name.toLowerCase().includes(w));
+
+  if (kind === "film") {
+    const favorites = S.store.favorites.filter(matches);
+    // An empty field shows only the favorites; typing searches the whole film list
+    if (!words.length) return { items: favorites, favorites: favorites.length };
+    const others = FILMS.map(filmFullName).filter((n) => !isFavorite(n) && matches(n));
+    return { items: [...favorites, ...others], favorites: favorites.length };
+  }
+  const list = kind === "camera" ? sortedGear("cameras") : kind === "lens" ? sortedGear("lenses") : [];
+  const items = list.filter(matches);
+  return { items, favorites: items.length };
 }
 
 function closeSuggest() {
@@ -658,7 +671,7 @@ function closeSuggest() {
 
 function openSuggest(input) {
   const kind = input.dataset.suggest;
-  const items = suggestionsFor(kind, input.value);
+  const { items, favorites } = suggestionsFor(kind, input.value);
   closeSuggest();
   const wrap = input.closest(".field-wrap");
   if (!wrap) return;
@@ -672,7 +685,7 @@ function openSuggest(input) {
   box.setAttribute("role", "listbox");
   box.innerHTML = noFavorites
     ? `<div class="suggest-empty">${emptyText}</div>`
-    : items.map((it, i) => `<div class="suggest-item${i === 0 ? " active" : ""}" role="option" data-pick="${esc(it)}">${esc(it)}</div>`).join("");
+    : items.map((it, i) => `${i === favorites && i > 0 ? `<div class="suggest-sep" role="separator"></div>` : ""}<div class="suggest-item${i === 0 ? " active" : ""}" role="option" data-pick="${esc(it)}">${esc(it)}</div>`).join("");
   wrap.appendChild(box);
   suggest = { input, items, active: items.length ? 0 : -1 };
 }
