@@ -26,6 +26,7 @@ const IC = {
   filmBig:   svg(40, 1.3, FILM),
   rotateCw:  svg(16, 1.6, `<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>`),
   rotateCcw: svg(16, 1.6, `<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>`),
+  close:     svg(14, 1.8, `<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>`),
   plus:      svg(15, 1.8, `<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>`),
   pencil:    svg(15, 1.6, `<path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>`),
   trash:     svg(15, 1.6, `<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>`),
@@ -161,13 +162,23 @@ async function refreshFolder({ keepThumbnails = false } = {}) {
   render();
 }
 
-let noticeTimer = null;
+// Success messages float at the bottom, can be dismissed, and disappear on their own
+let snackTimer = null;
+function hideSnackbar() {
+  clearTimeout(snackTimer);
+  $("snackbar").innerHTML = "";
+}
+function startSnackTimer() {
+  clearTimeout(snackTimer);
+  snackTimer = setTimeout(hideSnackbar, 5000);
+}
 function showNotice(text) {
-  const box = $("notice");
-  if (!box) return;
-  box.innerHTML = `<div class="success-banner" role="status">${esc(text)}</div>`;
-  clearTimeout(noticeTimer);
-  noticeTimer = setTimeout(() => { const b = $("notice"); if (b) b.innerHTML = ""; }, 5000);
+  $("snackbar").innerHTML = `
+    <div class="snackbar" role="status">
+      <span>${esc(text)}</span>
+      <button class="snackbar-x" data-action="close-snackbar" aria-label="Dismiss">${IC.close}</button>
+    </div>`;
+  startSnackTimer();
 }
 
 // ── Editing values in the list ────────────────────────────────────────────────
@@ -455,7 +466,6 @@ function viewExplorer() {
         <button class="btn btn-ghost" data-action="pick-folder">Change Folder…</button>
       </div>
       ${error}
-      <div id="notice"></div>
       <div class="filelist">
         <div class="row head"><div class="check"><input type="checkbox" id="check-all" data-check-all aria-label="Select all files"></div><div></div><div>File</div><div>Camera</div><div>Lens</div><div>Film</div><div>Date</div></div>
         ${rows}
@@ -985,6 +995,7 @@ document.addEventListener("click", (e) => {
   if (t.dataset.action === "toggle-fav-filter") { S.filmFavoritesOnly = !S.filmFavoritesOnly; render(); }
   if (t.dataset.action === "pick-folder") pickFolder();
   if (t.dataset.action === "save-edits") saveEdits();
+  if (t.dataset.action === "close-snackbar") hideSnackbar();
   if (t.dataset.action === "discard-edits") discardEdits();
   if (t.dataset.action === "close-modal") closeModal();
   if (t.dataset.action === "confirm-modal") confirmModal();
@@ -1000,6 +1011,10 @@ document.addEventListener("change", (e) => {
     updateSelectionUI();
   }
 });
+
+// Keep the message while the mouse is on it
+$("snackbar").addEventListener("mouseover", () => clearTimeout(snackTimer));
+$("snackbar").addEventListener("mouseout", () => { if ($("snackbar").firstElementChild) startSnackTimer(); });
 
 // Text fields write straight into the state (data-model="group.key")
 document.addEventListener("input", (e) => {

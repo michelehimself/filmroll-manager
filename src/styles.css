@@ -336,11 +336,19 @@ button { font-family: inherit; }
 .progress-fill  { height: 100%; width: 0; background: var(--accent); border-radius: 3px; transition: width .15s ease-out; }
 .loading-sub { font-variant-numeric: tabular-nums; }
 
-.success-banner {
-  margin: 12px 20px 0; padding: 9px 14px; border-radius: 8px;
-  background: var(--green-bg); color: var(--green-fg); border: 1px solid var(--green-bd);
-  font-size: 12.5px;
+#snackbar { position: fixed; left: 0; right: 0; bottom: 22px; z-index: 20; display: flex; justify-content: center; pointer-events: none; }
+.snackbar {
+  pointer-events: auto; display: flex; align-items: center; gap: 12px; max-width: min(560px, calc(100vw - 48px));
+  padding: 10px 8px 10px 16px; border-radius: 8px; font-size: 13px;
+  background: var(--text); color: var(--bg); box-shadow: 0 8px 28px rgba(0,0,0,.28);
+  animation: snack-in .2s ease-out;
 }
+.snackbar-x {
+  width: 24px; height: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: 6px; cursor: pointer; color: inherit; opacity: .7;
+}
+.snackbar-x:hover { opacity: 1; background: rgba(128,128,128,.3); }
+@keyframes snack-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 /* Reverse preview */
 .rev-list { background: var(--bg-subtle); border-radius: 8px; padding: 8px 12px; max-height: 320px; overflow-y: auto; }
@@ -424,4 +432,4 @@ button.tag:hover { opacity: .75; }
 .btn-success { background: var(--success); color: #fff; }
 .btn-success:not(:disabled):hover { background: var(--success-hover); }
 
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
