@@ -3,7 +3,7 @@
 
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
-const { open, ask } = window.__TAURI__.dialog;
+const { open, ask, save } = window.__TAURI__.dialog;
 const { getCurrentWebview } = window.__TAURI__.webview;
 
 // ── Platform: leave room for the macOS traffic lights ─────────────────────────
@@ -57,7 +57,7 @@ const TOOLS = [
   { id: "reverse", title: "Reverse Order",     desc: "Flip the frame order",      icon: IC.reverse, ready: true },
   { id: "meta",    title: "Bulk Edit Meta Data", desc: "Camera, lens, film, date", icon: IC.meta,    ready: true },
   { id: "rename",  title: "Bulk Rename",       desc: "Build new file names",      icon: IC.rename,  ready: true },
-  { id: "sheet",   title: "Create Contact Sheet", desc: "Overview of the roll",   icon: IC.sheet,   ready: false, soon: true },
+  { id: "sheet",   title: "Create Contact Sheet", desc: "Printable A4 overview (PDF)", icon: IC.sheet, ready: true },
 ];
 
 // ── Template tags (Bulk Rename) ───────────────────────────────────────────────
@@ -84,7 +84,8 @@ let S = {
   modal: null,    // null | "reverse" | "meta" | "rename"
   busy: false,    // a tool is writing to the files
   meta: { camera: "", lens: "", film: "", date: todayString(), time: "12:00" },
-  rename: { date: "", film: "" },   // values behind the Date and Film Name tags
+  rename: { date: "", film: "" },
+  sheet: { title: "", subtitle: "", orientation: "portrait", columns: "auto", showNames: false },   // values behind the Date and Film Name tags
   template: [],                      // [{ kind, value? }]
   store: { favorites: [], cameras: [], lenses: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
@@ -732,6 +733,7 @@ function openTool(id) {
     S.rename.date = (first.date || "").slice(0, 10) || S.meta.date;
     S.rename.film = first.film || S.meta.film;
   }
+  if (id === "sheet") prepareSheet();
   S.modal = id;
   renderModal();
 }
@@ -750,6 +752,7 @@ function renderModal() {
   const m = {
     reverse: { title: "Reverse Order", sub: "Every file swaps its name with the file on the opposite end of the roll. Frame 1 becomes the last frame, and so on.", body: bodyReverse(), ok: "Confirm", wait: "Reversing frame order…" },
     meta:    { title: "Bulk Edit Meta Data", sub: "This information is embedded into all image files in the folder. Every field is optional.", body: bodyMeta(), ok: "Embed Metadata", wait: "Embedding metadata…" },
+    sheet:   { title: "Create Contact Sheet", sub: "All frames on one A4 page, ready to print and file away. It is saved as a PDF on your computer.", body: bodySheet(), ok: "Save as PDF…", wait: "Creating the contact sheet…" },
     rename:  { title: "Bulk Rename", sub: "Click a tag to insert it at the cursor. You can type text between tags, too.", body: bodyRename(), ok: "Rename Files", wait: "Renaming files…" },
   }[S.modal];
 
@@ -766,8 +769,9 @@ function renderModal() {
       <button class="btn btn-ghost" data-action="close-modal">Cancel</button>
       <button class="btn ${S.modal === "rename" ? "btn-success" : "btn-primary"}" id="modal-ok" data-action="confirm-modal">${m.ok}</button>
     </div>`;
-  box.innerHTML = `<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-label="${m.title}">${inner}</div></div>`;
+  box.innerHTML = `<div class="modal-backdrop"><div class="modal${S.modal === "sheet" ? " wide" : ""}" role="dialog" aria-modal="true" aria-label="${m.title}">${inner}</div></div>`;
   if (!S.busy && S.modal === "rename") mountEditor();
+  if (!S.busy && S.modal === "sheet") renderSheetPreview();
 }
 
 // Reverse Order – simple preview: frame numbers and file names
@@ -811,7 +815,107 @@ function bodyMeta() {
     </div>`;
 }
 
-// Bulk Rename
+// Create Contact Sheet
+// Title and info line start with what the files already say; both can be changed
+function prepareSheet() {
+  const files = scopeFiles();
+  const distinct = (key) => [...new Set(files.map((f) => f[key]).filter(Boolean))];
+  const days = [...new Set(distinct("date").map((d) => d.slice(0, 10)))].sort();
+  const date = days.length > 1 ? `${days[0]} – ${days[days.length - 1]}` : (days[0] || "");
+  S.sheet.title = folderName(S.folder);
+  S.sheet.subtitle = [distinct("film").join(" / "), distinct("camera").join(" / "), distinct("lens").join(" / "), date]
+    .filter(Boolean).join("  ·  ");
+}
+
+const sheetOptions = () => ({
+  landscape: S.sheet.orientation === "landscape",
+  columns: S.sheet.columns === "auto" ? null : Number(S.sheet.columns),
+  showNames: S.sheet.showNames,
+  title: S.sheet.title,
+  subtitle: S.sheet.subtitle,
+});
+
+function bodySheet() {
+  const text = (id, label, placeholder) => `
+    <div class="field-wrap">
+      <label class="field-label" for="f-s-${id}">${label}</label>
+      <div class="field-row"><input id="f-s-${id}" data-model="sheet.${id}" type="text" placeholder="${placeholder}" value="${esc(S.sheet[id])}" autocomplete="off" spellcheck="false"></div>
+    </div>`;
+  const select = (id, label, options) => `
+    <div class="field-wrap">
+      <label class="field-label" for="f-s-${id}">${label}</label>
+      <div class="field-row"><select id="f-s-${id}" data-model="sheet.${id}">
+        ${options.map(([value, name]) => `<option value="${value}"${S.sheet[id] === value ? " selected" : ""}>${name}</option>`).join("")}
+      </select></div>
+    </div>`;
+  const columns = [["auto", "Automatic"], ...[4, 5, 6, 7, 8, 9, 10, 12].map((n) => [String(n), `${n} per row`])];
+  return `
+    <div class="scope">${scopeText()}</div>
+    <div class="sheet-layout">
+      <div class="sheet-controls fields">
+        ${text("title", "Title", "e.g. Roll 12")}
+        ${text("subtitle", "Info line", "Film, camera, lens, date")}
+        ${select("orientation", "Page", [["portrait", "A4 portrait"], ["landscape", "A4 landscape"]])}
+        ${select("columns", "Frames per row", columns)}
+        <label class="check-line"><input type="checkbox" data-model="sheet.showNames"${S.sheet.showNames ? " checked" : ""}> Show file names</label>
+        <div class="hint-box">Everything always fits on a single page. The frame number is printed below each picture.</div>
+      </div>
+      <div class="sheet-preview" id="sheet-preview" aria-label="Preview of the contact sheet"></div>
+    </div>`;
+}
+
+// The preview is drawn from the same layout the PDF uses (calculated by Rust), so they always match
+let sheetPreviewToken = 0;
+let sheetPreviewTimer = null;
+function scheduleSheetPreview() {
+  clearTimeout(sheetPreviewTimer);
+  sheetPreviewTimer = setTimeout(renderSheetPreview, 120);
+}
+
+async function renderSheetPreview() {
+  const box = $("sheet-preview");
+  if (!box || S.modal !== "sheet") return;
+  const token = ++sheetPreviewToken;
+  const files = scopeFiles();
+  let layout;
+  try {
+    layout = await invoke("contact_sheet_layout", { aspects: files.map((f) => f.aspect || 1.5), options: sheetOptions() });
+  } catch (e) {
+    box.innerHTML = `<div class="error-banner" role="alert">${esc(String(e))}</div>`;
+    return;
+  }
+  const holder = $("sheet-preview");
+  if (token !== sheetPreviewToken || !holder) return;   // a newer preview is on its way
+
+  const scale = Math.min(holder.clientWidth / layout.pageW, 500 / layout.pageH);
+  const px = (mm) => `${(mm * scale).toFixed(2)}px`;
+  const ptPx = (pts) => `${(pts * 0.3528 * scale).toFixed(2)}px`;   // 1 pt = 0.3528 mm
+  const digits = Math.max(2, String(files.length).length);
+
+  let html = `<div class="sheet-page" style="width:${px(layout.pageW)};height:${px(layout.pageH)}">`;
+  if (layout.hasHeader) {
+    const line = (text, baseline, size, cls) => `<div class="sheet-text ${cls}" style="left:${px(layout.margin)};top:${px(baseline - size * 0.3528 * 0.85)};width:${px(layout.pageW - 2 * layout.margin)};font-size:${ptPx(size)}">${esc(text)}</div>`;
+    html += line(S.sheet.title.trim(), layout.titleBaseline, layout.titlePt, "title");
+    html += line(S.sheet.subtitle.trim(), layout.subtitleBaseline, layout.subtitlePt, "subtitle");
+    html += `<div class="sheet-rule" style="left:${px(layout.margin)};top:${px(layout.ruleY)};width:${px(layout.pageW - 2 * layout.margin)}"></div>`;
+  }
+  layout.cells.forEach((cell, i) => {
+    const number = String(i + 1).padStart(digits, "0");
+    const label = S.sheet.showNames ? `${number}  ${files[i].name}` : number;
+    html += `<div class="sheet-cell" style="left:${px(cell.x)};top:${px(cell.y)};width:${px(layout.boxW)};height:${px(layout.boxH)}"><img data-path="${esc(files[i].path)}" alt=""></div>`;
+    html += `<div class="sheet-label" style="left:${px(cell.x)};top:${px(cell.y + layout.boxH)};width:${px(layout.boxW)};height:${px(layout.labelH)};line-height:${px(layout.labelH)};font-size:${ptPx(layout.labelPt)}">${esc(label)}</div>`;
+  });
+  holder.innerHTML = html + `</div>`;
+
+  // Previews come from the thumbnails of the list (loaded three at a time)
+  holder.querySelectorAll("img").forEach((img) => {
+    const cached = thumbUrls.get(img.dataset.path);
+    if (cached) showThumb(img, cached); else { thumbQueue.push(img); }
+  });
+  pumpThumbnails();
+}
+
+// Rename
 function bodyRename() {
   const buttons = Object.entries(TAGS).map(([kind, t]) =>
     `<button class="tag ${t.color}" data-insert="${kind}" id="ins-${kind}">${t.label}</button>`).join("");
@@ -936,9 +1040,18 @@ async function confirmModal() {
   const tool = S.modal;
   const count = scopeFiles().length;
   const files = scopeNames();
+
+  // The contact sheet asks where to save first; closing that window cancels
+  let sheetTarget = null;
+  if (tool === "sheet") {
+    const base = (S.sheet.title.trim() || folderName(S.folder)).replace(/[\/\\:*?"<>|]/g, "-");
+    sheetTarget = await save({ title: "Save contact sheet", defaultPath: `${S.folder}/${base} contact sheet.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] });
+    if (!sheetTarget) return;
+  }
   const jobs = {
     reverse: [() => invoke("reverse_order", { folder: S.folder, files }), "Frame order reversed."],
     meta:    [() => invoke("write_metadata", { folder: S.folder, meta: { ...S.meta }, files }), `Metadata written to ${count} file${count === 1 ? "" : "s"}.`],
+    sheet:   [() => invoke("save_contact_sheet", { folder: S.folder, files, options: sheetOptions(), target: sheetTarget }), "Contact sheet saved."],
     rename:  [() => invoke("rename_files", { folder: S.folder, parts: S.template, date: S.rename.date, film: S.rename.film, files }), `${count} file${count === 1 ? "" : "s"} renamed.`],
   };
   const [task, doneText] = jobs[tool];
@@ -964,7 +1077,11 @@ async function confirmModal() {
     S.busy = false;
   }
 
-  if (ok) {
+  if (ok && tool === "sheet") {   // no file changed, so there is nothing to reload
+    S.modal = null;
+    renderModal();
+    showNotice(`Contact sheet saved: ${sheetTarget.split(/[\\/]/).pop()}`);
+  } else if (ok) {
     S.modal = null;
     if (tool === "rename") { S.selected = new Set(); S.anchor = null; }   // names changed
     try { await refreshFolder(); } catch (e) { S.error = String(e); render(); }
@@ -1034,8 +1151,9 @@ document.addEventListener("input", (e) => {
   const model = e.target.dataset?.model;
   if (!model) return;
   const [group, key] = model.split(".");
-  S[group][key] = e.target.value;
+  S[group][key] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
   if (S.modal === "rename") renderPreview();
+  if (S.modal === "sheet") scheduleSheetPreview();
   if (e.target.dataset.suggest) openSuggest(e.target);
 });
 
