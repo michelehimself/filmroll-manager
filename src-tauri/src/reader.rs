@@ -199,6 +199,13 @@ pub async fn get_preview(path: String) -> Result<tauri::ipc::Response, String> {
     .map(tauri::ipc::Response::new)
 }
 
+/// For the list of recent folders: which of these folders still exist?
+/// (a folder on a disk that is not plugged in counts as missing for now)
+#[tauri::command]
+pub fn check_folders(paths: Vec<String>) -> Vec<bool> {
+    paths.iter().map(|p| Path::new(p).is_dir()).collect()
+}
+
 /// Shows the folder in Finder / Explorer / the Linux file manager. Changes nothing.
 #[tauri::command]
 pub fn open_folder(folder: String) -> Result<(), String> {
@@ -329,6 +336,20 @@ mod tests {
             let _ = make_thumbnail_sized(&path, 1600, 88).unwrap();
             eprintln!("{name}: {} ms if the picture was packed as JPEG first (the old way)", start.elapsed().as_millis());
         }
+    }
+
+    #[test]
+    fn existing_and_missing_folders_are_told_apart() {
+        let dir = std::env::temp_dir().join("filmroll_reader_check");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("not_a_folder.txt");
+        fs::write(&file, "x").unwrap();
+        let result = check_folders(vec![
+            dir.to_string_lossy().into_owned(),
+            dir.join("gone").to_string_lossy().into_owned(),
+            file.to_string_lossy().into_owned(),
+        ]);
+        assert_eq!(result, vec![true, false, false]);
     }
 
     #[test]

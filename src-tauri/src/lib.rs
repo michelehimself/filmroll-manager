@@ -19,6 +19,7 @@ pub fn run() {
             reader::get_thumbnail,
             reader::get_preview,
             reader::open_folder,
+            reader::check_folders,
             sheet::contact_sheet_layout,
             sheet::save_contact_sheet,
             store::load_store,
