@@ -85,7 +85,7 @@ let S = {
   busy: false,    // a tool is writing to the files
   meta: { camera: "", lens: "", film: "", date: todayString(), time: "12:00" },
   rename: { date: "", film: "" },
-  sheet: { style: "grid", title: "", subtitle: "", scannedAt: "", orientation: "portrait", columns: "auto", showNames: false },   // values behind the Date and Film Name tags
+  sheet: { title: "", subtitle: "", scannedAt: "", orientation: "portrait", columns: "auto", showNames: false },   // values behind the Date and Film Name tags
   template: [],                      // [{ kind, value? }]
   store: { favorites: [], cameras: [], lenses: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
@@ -828,7 +828,6 @@ function prepareSheet() {
 }
 
 const sheetOptions = () => ({
-  style: S.sheet.style,
   landscape: S.sheet.orientation === "landscape",
   columns: S.sheet.columns === "auto" ? null : Number(S.sheet.columns),
   showNames: S.sheet.showNames,
@@ -854,15 +853,14 @@ function bodySheet() {
   return `
     <div class="scope">${scopeText()}</div>
     <div class="sheet-layout">
-      <div class="sheet-controls fields" id="sheet-controls" data-style="${S.sheet.style}">
+      <div class="sheet-controls fields">
         ${text("title", "Title", "e.g. Roll 12")}
         ${text("subtitle", "Info line", "Film, camera, lens, date")}
         ${text("scannedAt", "Scanned at", "e.g. lab or scanner")}
-        ${select("style", "Style", [["grid", "Clean grid"], ["strip", "Film strip"]])}
         ${select("orientation", "Page", [["portrait", "A4 portrait"], ["landscape", "A4 landscape"]])}
         ${select("columns", "Frames per row", columns)}
         <label class="check-line"><input type="checkbox" data-model="sheet.showNames"${S.sheet.showNames ? " checked" : ""}> Show file names</label>
-        <div class="hint-box">Everything always fits on a single page. Frames are numbered in the order of the list.</div>
+        <div class="hint-box">Everything always fits on a single page. The frame number is printed below each picture.</div>
       </div>
       <div class="sheet-preview" id="sheet-preview" aria-label="Preview of the contact sheet"></div>
     </div>`;
@@ -904,31 +902,11 @@ async function renderSheetPreview() {
     html += line(layout.scanText, layout.scanBaseline, layout.subtitlePt, "subtitle");
     html += `<div class="sheet-rule" style="left:${px(layout.margin)};top:${px(layout.ruleY)};width:${px(layout.pageW - 2 * layout.margin)}"></div>`;
   }
-  const strip = layout.style === "strip" && layout.stripSpec;
-  if (strip) {
-    // Dark strips, sprocket holes and edge print are drawn as one SVG in millimetres, behind the pictures
-    const sp = layout.stripSpec;
-    let svg = `<svg class="sheet-strips" viewBox="0 0 ${layout.pageW} ${layout.pageH}" style="width:${px(layout.pageW)};height:${px(layout.pageH)}">`;
-    layout.strips.forEach((st) => {
-      svg += `<rect class="strip-bg" x="${st.x}" y="${st.y}" width="${st.w}" height="${st.h}"/>`;
-      if (!sp.perforated) return;
-      for (let k = 0; k < st.frames * 8; k++) {
-        const x = st.x + (k + 0.5) * sp.holePitch - sp.holeW / 2;
-        [sp.topHoleY, sp.bottomHoleY].forEach((y) => { svg += `<rect class="strip-hole" x="${x}" y="${st.y + y}" width="${sp.holeW}" height="${sp.holeH}" rx="${sp.holeH * 0.25}"/>`; });
-      }
-    });
-    layout.cells.forEach((cell, i) => {
-      const y = cell.y + layout.boxH + sp.textOffset, size = sp.textPt * 0.3528;
-      svg += `<text class="strip-edge" x="${cell.x}" y="${y}" font-size="${size}">${i + 1}</text>`;
-      svg += `<text class="strip-edge" x="${cell.x + layout.boxW}" y="${y}" font-size="${size}" text-anchor="end">${i + 1}A</text>`;
-    });
-    html += svg + `</svg>`;
-  }
   layout.cells.forEach((cell, i) => {
     const number = String(i + 1).padStart(digits, "0");
     const label = S.sheet.showNames ? `${number}  ${files[i].name}` : number;
-    html += `<div class="sheet-cell${strip ? " film" : ""}" style="left:${px(cell.x)};top:${px(cell.y)};width:${px(layout.boxW)};height:${px(layout.boxH)}"><img data-path="${esc(files[i].path)}" alt=""></div>`;
-    if (!strip) html += `<div class="sheet-label" style="left:${px(cell.x)};top:${px(cell.y + layout.boxH)};width:${px(layout.boxW)};height:${px(layout.labelH)};line-height:${px(layout.labelH)};font-size:${ptPx(layout.labelPt)}">${esc(label)}</div>`;
+    html += `<div class="sheet-cell" style="left:${px(cell.x)};top:${px(cell.y)};width:${px(layout.boxW)};height:${px(layout.boxH)}"><img data-path="${esc(files[i].path)}" alt=""></div>`;
+    html += `<div class="sheet-label" style="left:${px(cell.x)};top:${px(cell.y + layout.boxH)};width:${px(layout.boxW)};height:${px(layout.labelH)};line-height:${px(layout.labelH)};font-size:${ptPx(layout.labelPt)}">${esc(label)}</div>`;
   });
   holder.innerHTML = html + `</div>`;
 
@@ -1178,10 +1156,7 @@ document.addEventListener("input", (e) => {
   const [group, key] = model.split(".");
   S[group][key] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
   if (S.modal === "rename") renderPreview();
-  if (S.modal === "sheet") {
-    $("sheet-controls")?.setAttribute("data-style", S.sheet.style);   // file names only make sense in the clean grid
-    scheduleSheetPreview();
-  }
+  if (S.modal === "sheet") scheduleSheetPreview();
   if (e.target.dataset.suggest) openSuggest(e.target);
 });
 
