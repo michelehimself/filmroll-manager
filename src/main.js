@@ -42,6 +42,9 @@ const IC = {
   sun:        svg(15, 1.6, `<circle cx="12" cy="12" r="4"/> <path d="M12 2v2"/> <path d="M12 20v2"/> <path d="m4.93 4.93 1.41 1.41"/> <path d="m17.66 17.66 1.41 1.41"/> <path d="M2 12h2"/> <path d="M20 12h2"/> <path d="m6.34 17.66-1.41 1.41"/> <path d="m19.07 4.93-1.41 1.41"/>`),
   moon:       svg(15, 1.6, `<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>`),
   monitor:    svg(15, 1.6, `<rect width="20" height="14" x="2" y="3" rx="2"/> <path d="M8 21h8"/> <path d="M12 17v4"/>`),
+  globe:      svg(16, 1.6, `<circle cx="12" cy="12" r="10"/> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/> <path d="M2 12h20"/>`),
+  instagram:  svg(16, 1.6, `<rect width="20" height="20" x="2" y="2" rx="5" ry="5"/> <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/> <line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/>`),
+  arrowUpRight: svg(14, 1.6, `<path d="M7 7h10v10"/> <path d="M7 17 17 7"/>`),
   close:      svg(14, 1.8, `<path d="M18 6 6 18"/> <path d="m6 6 12 12"/>`),
   closeSmall: svg(10, 2, `<path d="M18 6 6 18"/> <path d="m6 6 12 12"/>`),
   maximize:   svg(16, 1.6, `<path d="M8 3H5a2 2 0 0 0-2 2v3"/> <path d="M21 8V5a2 2 0 0 0-2-2h-3"/> <path d="M3 16v3a2 2 0 0 0 2 2h3"/> <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>`),
@@ -804,7 +807,8 @@ function viewSettings() {
           <p class="step-sub">Changes apply right away.</p>
         </div>
       </div>
-      <div class="page-scroll">
+      <div class="page-scroll fill"><div class="gear-grid">
+       <section class="gear-col">
         <section class="settings-block">
           <p class="settings-title">Appearance</p>
           <p class="settings-label">Theme</p>
@@ -828,11 +832,49 @@ function viewSettings() {
         <section class="settings-block">
           <p class="settings-title">About</p>
           <div class="about-row"><span>Version</span><span>${esc(version.replace(/^v/, ""))}${IS_DEV ? " (development)" : ""}</span></div>
+          <div class="about-row"><span>Website</span><span class="soon-line"><span class="legal-link">filmrollmanager.com</span><span class="soon-badge">Coming soon</span></span></div>
           <div class="about-row"><span>Privacy</span><span>Your pictures never leave this computer. Nothing is uploaded or tracked.</span></div>
           <div class="about-row"><span>Legal</span><span class="legal-links"><span class="legal-link" aria-disabled="true" title="Coming soon">Legal Notice</span><span class="legal-link" aria-disabled="true" title="Coming soon">Privacy Policy</span></span></div>
         </section>
-      </div>
+       </section>
+       ${viewAboutMe()}
+      </div></div>
     </div>`;
+}
+
+// "About me" card on the Settings page. The Instagram links open in the web browser, but only when clicked.
+const ABOUT_ME = {
+  name: "Michele",
+  handle: "@MicheleHimself",
+  text: "Photographer. I made FilmRoll Manager to get my own lab scans ready for my photo library, and I share it for free. If it saves you time, I would be happy if you followed along.",
+  links: [
+    { icon: IC.globe,     label: "Website",   sub: "michelehimself.com",        soon: true },
+    { icon: IC.instagram, label: "Instagram", sub: "@michelehimself",           url: "https://www.instagram.com/michelehimself/" },
+    { icon: IC.instagram, label: "Instagram", sub: "@documentingevents",        url: "https://www.instagram.com/documentingevents/" },
+  ],
+};
+
+function viewAboutMe() {
+  const a = ABOUT_ME;
+  const link = (l) => l.soon
+    ? `<div class="me-link soon" aria-disabled="true"><span class="me-icon">${l.icon}</span><span class="me-text"><span class="me-label">${l.label}</span><span class="me-sub">${l.sub}</span></span><span class="soon-badge">Coming soon</span></div>`
+    : `<button class="me-link" data-open-url="${l.url}" title="Opens in your web browser"><span class="me-icon">${l.icon}</span><span class="me-text"><span class="me-label">${l.label}</span><span class="me-sub">${l.sub}</span></span><span class="me-go">${IC.arrowUpRight}</span></button>`;
+  return `
+    <section class="gear-col">
+      <p class="gear-title">About me</p>
+      <div class="me-head">
+        <div class="me-avatar" aria-hidden="true">${esc(a.name.charAt(0))}</div>
+        <div><div class="me-name">${esc(a.name)}</div><div class="me-handle">${esc(a.handle)}</div></div>
+      </div>
+      <p class="me-bio">${esc(a.text)}</p>
+      <div class="me-links">${a.links.map(link).join("")}</div>
+    </section>`;
+}
+
+// Only the links listed in ABOUT_ME can be opened
+function openExternal(url) {
+  if (!ABOUT_ME.links.some((l) => l.url === url)) return;
+  window.__TAURI__.opener?.openUrl(url).catch(() => {});
 }
 
 function setTheme(theme) {
@@ -1807,10 +1849,11 @@ document.addEventListener("click", (e) => {
   // File list: click a row to select, Cmd/Ctrl-click to add, Shift-click for a range
   const row = e.target.closest(".row.file");
   if (row && !e.target.closest("input, button")) { selectRow(row.dataset.row, e); return; }
-  const t = e.target.closest("[data-action],[data-recent],[data-recent-remove],[data-film-edit],[data-film-remove],[data-rotate],[data-rate],[data-rate-sel],[data-rate-ql],[data-tab],[data-theme-choice],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
+  const t = e.target.closest("[data-action],[data-recent],[data-recent-remove],[data-film-edit],[data-film-remove],[data-open-url],[data-rotate],[data-rate],[data-rate-sel],[data-rate-ql],[data-tab],[data-theme-choice],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
   if (!t || t.disabled) return;
   if (t.dataset.tab && t.dataset.tab !== S.tab) { S.tab = t.dataset.tab; render(); }
   if (t.dataset.themeChoice) setTheme(t.dataset.themeChoice);
+  if (t.dataset.openUrl) openExternal(t.dataset.openUrl);
   if (t.dataset.tool) openTool(t.dataset.tool);
   if (t.dataset.rotate) rotateSelected(t.dataset.rotate === "cw");
   if (t.dataset.rate) {   // a star in the list: only that file

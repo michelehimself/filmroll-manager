@@ -15,6 +15,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_opener::init())
         .on_window_event(|_window, event| eprintln!("[window] {event:?}"))
         .invoke_handler(tauri::generate_handler![
             is_dev_build,
