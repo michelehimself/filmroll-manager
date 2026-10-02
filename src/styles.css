@@ -179,6 +179,17 @@ button { font-family: inherit; }
 
 [hidden] { display: none !important; }
 
+/* ── Checkboxes: drawn here so the blue is exactly the accent colour ── */
+input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; flex-shrink: 0;
+  width: 16px; height: 16px; margin: 0; border-radius: 4px;
+  border: 1px solid var(--border); background: var(--surface) center / 12px no-repeat;
+  display: inline-grid; place-content: center; cursor: pointer;
+}
+input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate { background-color: var(--accent); border-color: var(--accent); }
+input[type="checkbox"]:checked { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5.5'/%3E%3C/svg%3E"); }
+input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 6h6'/%3E%3C/svg%3E"); }
+
 /* ── File list ──────────────────────────────────── */
 .filelist { flex: 1; min-height: 0; overflow: auto; }
 .row {
@@ -196,7 +207,7 @@ button { font-family: inherit; }
 .row.file.selected { background: var(--bg-selected); }
 .row.file { cursor: default; }
 .check { display: flex; align-items: center; justify-content: center; }
-.check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+.check input { cursor: pointer; }
 .scope { font-size: 12px; font-weight: 500; color: var(--text-2); background: var(--bg-selected); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; }
 .cell { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; -webkit-user-select: text; }
 .cell.name { font-weight: 500; font-family: var(--font-mono); font-size: 12px; }
@@ -489,7 +500,7 @@ button { font-family: inherit; }
   transform: translateY(-70%) rotate(45deg); pointer-events: none;
 }
 .check-line { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
-.check-line input { width: 15px; height: 15px; accent-color: var(--accent); }
+
 @media (max-width: 900px) { .sheet-layout { grid-template-columns: 1fr; } }
 
 /* Reverse preview */
