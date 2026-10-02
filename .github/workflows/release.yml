@@ -1,0 +1,50 @@
+# Builds the Mac app when a version tag like v0.5.0 is pushed, signs the update files and puts
+# everything on the public releases page (michelehimself/filmroll-manager-releases).
+# The code itself stays in this private repository.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  mac:
+    runs-on: macos-latest   # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          # needs write access to the releases repository (see CLAUDE.md, "Releasing")
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          owner: michelehimself
+          repo: filmroll-manager-releases
+          tagName: ${{ github.ref_name }}
+          releaseName: "FilmRoll Manager ${{ github.ref_name }}"
+          releaseBody: |
+            **Mac with Apple Silicon (M1 or newer):** download the `.dmg`, drag the app into Applications.
+            The first time, right-click the app and choose "Open" (the app is not signed with an Apple developer account).
+            If macOS still refuses: `xattr -dr com.apple.quarantine "/Applications/FilmRoll Manager.app"` in Terminal.
+
+            Already installed? Open Settings in the app and choose "Check now" to update.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --target aarch64-apple-darwin

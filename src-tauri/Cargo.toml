@@ -25,6 +25,11 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 pdf-writer = "0.15.0"
 
+# In-app updates (desktop only): look for a newer version, install it, restart
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
 # Decoding large scans is slow in debug builds, so optimise the libraries even there
 [profile.dev.package."*"]
 opt-level = 3

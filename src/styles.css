@@ -163,6 +163,12 @@ button { font-family: inherit; }
 .segmented button:hover { border-color: var(--accent); background: var(--accent-soft); }
 .segmented button.on:hover { background: var(--bg-selected); }
 .segmented button.on { background: var(--bg-selected); color: var(--text); border-color: var(--text-3); }
+.update-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.update-status { font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
+.update-status.bad { color: var(--danger-text); }
+.settings-check { margin-top: 2px; }
+.tab.nav-settings { position: relative; }
+.tab.nav-settings.has-update::after { content: ""; position: absolute; top: 6px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .about-row { display: flex; gap: 12px; font-size: 13px; color: var(--text-2); padding: 7px 0; border-bottom: 1px solid var(--border-soft); }
 .about-row span:first-child { width: 90px; color: var(--text-3); }
 

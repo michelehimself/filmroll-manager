@@ -6,6 +6,12 @@ const { listen } = window.__TAURI__.event;
 const { open, ask, save } = window.__TAURI__.dialog;
 const { getCurrentWebview } = window.__TAURI__.webview;
 
+// The version in the title bar is the one the app was built with
+window.__TAURI__.app?.getVersion?.().then((v) => {
+  document.querySelector(".titlebar-version").textContent = `v${v}`;
+  if ($("view") && S.tab === "settings") render();
+}).catch(() => {});
+
 // ── Platform: leave room for the macOS traffic lights ─────────────────────────
 if (navigator.userAgent.includes("Mac")) {
   document.querySelector(".titlebar").style.paddingLeft = "80px";
@@ -63,6 +69,79 @@ try { applyTheme(localStorage.getItem("theme") || "system"); } catch { applyThem
 const FILE_MANAGER_LABEL = navigator.userAgent.includes("Mac") ? "Open in Finder"
   : navigator.userAgent.includes("Windows") ? "Open in Explorer" : "Open Folder";
 
+// ── Updates (Tauri updater plugin; looks at the public releases page on GitHub) ──
+// Only a small file with the newest version number is requested; no pictures or file names are ever sent.
+let pendingUpdate = null;   // the update object from the plugin while one is waiting
+const updateApi = () => window.__TAURI__?.updater;
+
+async function checkForUpdate({ silent = false } = {}) {
+  if (S.update.state === "checking" || S.update.state === "installing") return;
+  S.update = { state: "checking" };
+  refreshUpdateUI();
+  try {
+    const update = await updateApi().check();
+    if (update) {
+      pendingUpdate = update;
+      S.update = { state: "available", version: update.version };
+      if (silent) showNotice(`Version ${update.version} is available. Install it in Settings.`);
+    } else {
+      pendingUpdate = null;
+      S.update = { state: "current" };
+    }
+  } catch (e) {
+    S.update = silent ? { state: "idle" } : { state: "error", message: String(e) };
+  }
+  refreshUpdateUI();
+}
+
+async function installUpdate() {
+  if (!pendingUpdate || S.update.state === "installing") return;
+  const version = pendingUpdate.version;
+  let total = 0, done = 0;
+  S.update = { state: "installing", version, percent: 0 };
+  refreshUpdateUI();
+  try {
+    await pendingUpdate.downloadAndInstall((event) => {
+      if (event.event === "Started") total = event.data.contentLength || 0;
+      if (event.event === "Progress") { done += event.data.chunkLength; S.update.percent = total ? Math.round((done / total) * 100) : 0; refreshUpdateUI(); }
+    });
+    await window.__TAURI__.process.relaunch();
+  } catch (e) {
+    S.update = { state: "error", message: `The update could not be installed: ${e}` };
+    refreshUpdateUI();
+  }
+}
+
+function updateStatusText() {
+  const u = S.update;
+  if (u.state === "checking")   return "Checking…";
+  if (u.state === "current")    return "You have the newest version.";
+  if (u.state === "available")  return `Version ${u.version} is available.`;
+  if (u.state === "installing") return `Downloading version ${u.version}… ${u.percent}%`;
+  if (u.state === "error")      return u.message;
+  return "";
+}
+
+// Updates only the update controls (and the dot on the Settings icon), not the whole page
+function refreshUpdateUI() {
+  const box = $("update-box");
+  if (box) box.innerHTML = updateControls();
+  document.querySelector(".nav-settings")?.classList.toggle("has-update", S.update.state === "available");
+}
+
+function updateControls() {
+  const u = S.update;
+  const busy = u.state === "checking" || u.state === "installing";
+  const text = updateStatusText();
+  return `
+    <div class="update-row">
+      ${u.state === "available" || u.state === "installing"
+        ? `<button class="btn btn-primary" data-action="install-update"${busy ? " disabled" : ""}>Install and restart</button>`
+        : `<button class="btn btn-ghost" data-action="check-update"${busy ? " disabled" : ""}>Check now</button>`}
+      <span class="update-status${u.state === "error" ? " bad" : ""}" role="status">${esc(text)}</span>
+    </div>`;
+}
+
 // ── Tabs and tools ────────────────────────────────────────────────────────────
 const TABS = [
   { id: "manager", label: "Manager", icon: IC.folder },
@@ -97,6 +176,7 @@ function todayString() {
 
 let S = {
   tab: "manager",
+  update: { state: "idle" },   // idle | checking | current | available | installing | error
   folder: null,   // absolute path
   files: [],      // [{ name, path, camera, lens, film, date }] in natural order
   loading: false,
@@ -681,7 +761,7 @@ function observeThumbnails() {
 function viewNav() {
   return `<nav class="nav" role="tablist" aria-label="Sections">${TABS.map((t) =>
     `<button class="tab${t.id === S.tab ? " active" : ""}" role="tab" aria-selected="${t.id === S.tab}" data-tab="${t.id}">${t.icon}<span>${t.label}</span></button>`
-  ).join("")}<button class="tab nav-settings${S.tab === "settings" ? " active" : ""}" role="tab" aria-selected="${S.tab === "settings"}" data-tab="settings" title="Settings" aria-label="Settings">${IC.settings}</button></nav>`;
+  ).join("")}<button class="tab nav-settings${S.tab === "settings" ? " active" : ""}${S.update.state === "available" ? " has-update" : ""}" role="tab" aria-selected="${S.tab === "settings"}" data-tab="settings" title="Settings" aria-label="Settings">${IC.settings}</button></nav>`;
 }
 
 function render() {
@@ -722,6 +802,12 @@ function viewSettings() {
           <div class="segmented" role="radiogroup" aria-label="Theme">
             ${THEMES.map(([id, label, icon]) => `<button class="${id === theme ? "on" : ""}" role="radio" aria-checked="${id === theme}" data-theme-choice="${id}">${icon}${label}</button>`).join("")}
           </div>
+        </section>
+        <section class="settings-block">
+          <p class="settings-title">Updates</p>
+          <p class="settings-hint">Looking for an update asks github.com for the newest version number. No pictures, file names or personal data are sent; GitHub only sees that a request came from your internet connection.</p>
+          <div id="update-box">${updateControls()}</div>
+          <label class="check-line settings-check"><input type="checkbox" data-auto-update${S.store.autoUpdate ? " checked" : ""}> Check for updates when the app starts</label>
         </section>
         <section class="settings-block">
           <p class="settings-title">About</p>
@@ -939,11 +1025,12 @@ async function loadStore() {
     const films = (v) => (Array.isArray(v) ? v.filter((f) => f && typeof f.name === "string").map((f) => ({
       brand: String(f.brand || ""), name: f.name, iso: String(f.iso || ""), type: FILM_TYPES.includes(f.type) ? f.type : FILM_TYPES[0],
     })) : []);
-    S.store = { ...data, theme: THEMES.some((t) => t[0] === data.theme) ? data.theme : "system", favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses), customFilms: films(data.customFilms), recentFolders: recents(data.recentFolders) };
+    S.store = { ...data, autoUpdate: data.autoUpdate === true, theme: THEMES.some((t) => t[0] === data.theme) ? data.theme : "system", favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses), customFilms: films(data.customFilms), recentFolders: recents(data.recentFolders) };
     applyTheme(S.store.theme);
   } catch (e) {
     S.storeError = `Your saved favorites could not be loaded: ${e}`;
   }
+  if (S.store.autoUpdate && updateApi()) checkForUpdate({ silent: true });
   if (S.tab === "films" || S.tab === "gear" || S.tab === "settings" || (S.tab === "manager" && !S.folder && !S.loading && !S.modal)) render();
 }
 
@@ -1731,6 +1818,8 @@ document.addEventListener("click", (e) => {
   if (t.dataset.action === "open-folder") invoke("open_folder", { folder: S.folder }).catch((err) => { S.error = String(err); render(); });
   if (t.dataset.action === "save-edits") saveEdits();
   if (t.dataset.action === "show-shortcuts") openShortcuts();
+  if (t.dataset.action === "check-update") checkForUpdate();
+  if (t.dataset.action === "install-update") installUpdate();
   if (t.dataset.action === "clear-recents") clearRecents();
   if (t.dataset.recent) loadFolder(t.dataset.recent);
   if (t.dataset.recentRemove) removeRecent(t.dataset.recentRemove);
@@ -1748,6 +1837,7 @@ document.addEventListener("click", (e) => {
 });
 
 document.addEventListener("change", (e) => {
+  if (e.target.hasAttribute?.("data-auto-update")) { S.store.autoUpdate = e.target.checked; saveStore(); }
   if (e.target.dataset?.check) toggleCheck(e.target.dataset.check, e.target.checked);
   if (e.target.hasAttribute?.("data-check-all")) {
     S.selected = e.target.checked ? new Set(S.files.map((f) => f.name)) : new Set();

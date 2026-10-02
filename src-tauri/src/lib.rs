@@ -7,6 +7,8 @@ mod store;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .on_window_event(|_window, event| eprintln!("[window] {event:?}"))
         .invoke_handler(tauri::generate_handler![
             processor::list_images,
