@@ -285,7 +285,7 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
   background: none; border: none; cursor: pointer; color: var(--text-3);
 }
 .star-btn svg { fill: none; transition: fill .1s, color .1s; }
-.star-btn.on { color: var(--accent); }
+.star-btn.on { color: var(--text); }   /* filled stars are white in dark mode (dark in light mode); only hover is blue */
 .star-btn.on svg { fill: currentColor; }
 .star-btn:not(:disabled):hover { color: var(--accent); }
 .star-btn:disabled { cursor: default; opacity: .4; }
