@@ -1,6 +1,6 @@
 # FilmRoll Manager
 
-by @MicheleHimself · v0.4.0
+by @MicheleHimself · v0.5.0
 
 Prepares film scans from the lab for your photo library, in four steps:
 
