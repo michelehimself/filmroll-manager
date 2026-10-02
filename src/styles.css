@@ -336,7 +336,7 @@ button { font-family: inherit; }
   background: none; border: none; border-radius: 6px; cursor: pointer; color: var(--text-3);
 }
 .star:hover { background: var(--border-soft); color: var(--text-2); }
-.star.on { color: var(--text); }
+.star.on { color: var(--accent); }
 .star.on svg { fill: currentColor; }
 .page-scroll .empty-view { padding: 60px 24px; }
 
