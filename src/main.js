@@ -309,6 +309,65 @@ function updateSelectionUI() {
 // Quick tools need a selection – they never act on the whole roll by accident
 function updateQuickTools() {
   document.querySelectorAll("[data-rotate]").forEach((b) => { b.disabled = !S.selected.size || S.busy; });
+  updateRatingUI();
+}
+
+// ── Star ratings (1–5, saved as xmp:Rating in JPEG files) ──────────────────────
+const isJpegName = (name) => /\.jpe?g$/i.test(name);
+const ratingWord = (n) => (n === 0 ? "no rating" : `${n} star${n === 1 ? "" : "s"}`);
+const selectedFiles = () => S.files.filter((f) => S.selected.has(f.name));
+const NO_JPEG = "Star ratings can only be saved in JPEG files.";
+
+// What a group of files shows: their rating if it is the same for all, otherwise nothing
+function commonRating(files) {
+  const jpegs = files.filter((f) => isJpegName(f.name));
+  if (!jpegs.length) return 0;
+  return jpegs.every((f) => (f.rating || 0) === (jpegs[0].rating || 0)) ? (jpegs[0].rating || 0) : 0;
+}
+
+// Five star buttons; `attr` says what a click means (data-rate="file name", data-rate-sel, data-rate-ql)
+function starButtons(rating, attr, disabled, icon) {
+  return [1, 2, 3, 4, 5].map((n) =>
+    `<button class="star-btn${n <= rating ? " on" : ""}" ${attr}="${n}" tabindex="-1" ${disabled ? `disabled title="${NO_JPEG}"` : `title="${n} star${n === 1 ? "" : "s"}"`} aria-label="${n} star${n === 1 ? "" : "s"}">${icon}</button>`
+  ).join("");
+}
+
+function updateRatingUI() {
+  const byName = new Map(S.files.map((f) => [f.name, f]));
+  document.querySelectorAll("[data-rate-file]").forEach((cell) => {
+    const f = byName.get(cell.dataset.rateFile);
+    if (f) cell.innerHTML = rowStars(f);
+  });
+  const editor = $("editor-rating");
+  if (editor) {
+    const chosen = selectedFiles();
+    const off = !chosen.length || S.busy || !chosen.some((f) => isJpegName(f.name));
+    editor.innerHTML = starButtons(commonRating(chosen), "data-rate-sel", off, IC.star);
+  }
+  const ql = $("ql-rating");
+  const file = ql && S.preview && S.files.find((f) => f.name === S.preview);
+  if (file) ql.innerHTML = starButtons(file.rating || 0, "data-rate-ql", !isJpegName(file.name), IC.star);
+}
+const rowStars = (f) => starButtons(f.rating || 0, "data-rate", !isJpegName(f.name), IC.starSmall);
+
+// Shows the new stars at once and writes them into the files in the background (one write after the other)
+function rateFiles(files, rating) {
+  if (!files.length) return;
+  const jpegs = files.filter((f) => isJpegName(f.name));
+  if (!jpegs.length) { S.error = NO_JPEG; render(); return; }
+  const before = jpegs.map((f) => [f, f.rating || 0]);
+  jpegs.forEach((f) => { f.rating = rating; });
+  updateRatingUI();
+  const names = jpegs.map((f) => f.name);
+  writeChain = writeChain
+    .then(() => invoke("set_rating", { folder: S.folder, files: names, rating }))
+    .then(() => { if (jpegs.length > 1) showNotice(`${jpegs.length} files: ${ratingWord(rating)}.`); })
+    .catch((e) => {
+      before.forEach(([f, r]) => { f.rating = r; });
+      S.error = `Could not save the rating: ${e}`;
+      render();
+    });
+  if (jpegs.length < files.length) { S.error = `${NO_JPEG} ${files.length - jpegs.length} other file${files.length - jpegs.length === 1 ? " was" : "s were"} left out.`; render(); }
 }
 
 async function rotateSelected(clockwise) {
@@ -437,6 +496,9 @@ function renderQuickLook() {
           <button class="ql-key" data-action="preview-rotate-left" aria-label="Rotate left (L)" title="Rotate left (L)">L</button>
           <button class="ql-key" data-action="preview-rotate-right" aria-label="Rotate right (R)" title="Rotate right (R)">R</button>
           <span class="ql-action-label">Rotate right</span>
+          <span class="ql-sep" aria-hidden="true"></span>
+          <span class="ql-action-label" style="min-width:0">Rating</span>
+          <span class="rate ql-rate" id="ql-rating" title="Keys 1 to 5, 0 removes the rating">${starButtons(file.rating || 0, "data-rate-ql", !isJpegName(file.name), IC.star)}</span>
         </div>
       </div>
     </div>`;
@@ -702,7 +764,13 @@ function viewEditor() {
         <button class="btn btn-ghost square" data-rotate="cw" title="Rotate clockwise (${MOD}+R)" aria-label="Rotate selected files clockwise" disabled>${IC.rotateCw}</button>
       </span>
     </div>`;
-  return `<aside class="sidebar editor"><div class="editor-title">Editor</div>${rotate}${sections}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p><button class="shortcuts-btn" data-action="show-shortcuts">${IC.keyboard}<span>Shortcuts</span></button></aside>`;
+  const chosen = S.folder ? selectedFiles() : [];
+  const rating = `
+    <div class="quick" role="group" aria-label="Rating">
+      <span class="quick-label">Rating</span>
+      <span class="rate" id="editor-rating" title="${MOD}+1 to ${MOD}+5">${starButtons(commonRating(chosen), "data-rate-sel", !chosen.length, IC.star)}</span>
+    </div>`;
+  return `<aside class="sidebar editor"><div class="editor-title">Editor</div>${rotate}${rating}${sections}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p><button class="shortcuts-btn" data-action="show-shortcuts">${IC.keyboard}<span>Shortcuts</span></button></aside>`;
 }
 
 // ── Recent folders (shown on the Select Folder page) ──────────────────────────
@@ -818,7 +886,7 @@ function viewExplorer() {
       <div class="check"><input type="checkbox" data-check="${esc(f.name)}" ${S.selected.has(f.name) ? "checked" : ""} aria-label="Select ${esc(f.name)}"></div>
       <div class="thumb">${IC.image}<img data-path="${esc(f.path)}" alt=""></div>
       <div class="cell name" title="${esc(f.name)}">${esc(f.name)}</div>
-      ${editCell(f, "camera")}${editCell(f, "lens")}${editCell(f, "film")}${editCell(f, "date")}
+      ${editCell(f, "camera")}${editCell(f, "lens")}${editCell(f, "film")}<div class="cell rate" data-rate-file="${esc(f.name)}">${rowStars(f)}</div>${editCell(f, "date")}
     </div>`).join("");
   return `
     <section class="explorer" id="dropzone">
@@ -837,7 +905,7 @@ function viewExplorer() {
       </div>
       ${error}
       <div class="filelist">
-        <div class="row head"><div class="check"><input type="checkbox" id="check-all" data-check-all aria-label="Select all files"></div><div></div><div>File</div><div>Camera</div><div>Lens</div><div>Film</div><div>Date</div></div>
+        <div class="row head"><div class="check"><input type="checkbox" id="check-all" data-check-all aria-label="Select all files"></div><div></div><div>File</div><div>Camera</div><div>Lens</div><div>Film</div><div>Rating</div><div>Date</div></div>
         ${rows}
       </div>
     </section>`;
@@ -1213,10 +1281,12 @@ function bodyShortcuts() {
       [["Space"], "Enlarge the selected picture", IC.maximize],
       [[MOD, "R"], "Rotate the selected pictures clockwise", IC.rotateCw],
       [[MOD, "L"], "Rotate the selected pictures counterclockwise", IC.rotateCcw],
+      [[MOD, "1 – 5"], "Rate the selected pictures (" + MOD + " 0 removes the rating)", IC.star],
     ]],
     ["Large preview", [
       [["R"], "Rotate the picture clockwise", IC.rotateCw],
       [["L"], "Rotate the picture counterclockwise", IC.rotateCcw],
+      [["1 – 5"], "Rate the picture (0 removes the rating)", IC.star],
     ]],
   ];
   return groups.map(([title, rows]) => `
@@ -1633,12 +1703,25 @@ document.addEventListener("click", (e) => {
   // File list: click a row to select, Cmd/Ctrl-click to add, Shift-click for a range
   const row = e.target.closest(".row.file");
   if (row && !e.target.closest("input, button")) { selectRow(row.dataset.row, e); return; }
-  const t = e.target.closest("[data-action],[data-recent],[data-recent-remove],[data-film-edit],[data-film-remove],[data-rotate],[data-tab],[data-theme-choice],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
+  const t = e.target.closest("[data-action],[data-recent],[data-recent-remove],[data-film-edit],[data-film-remove],[data-rotate],[data-rate],[data-rate-sel],[data-rate-ql],[data-tab],[data-theme-choice],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
   if (!t || t.disabled) return;
   if (t.dataset.tab && t.dataset.tab !== S.tab) { S.tab = t.dataset.tab; render(); }
   if (t.dataset.themeChoice) setTheme(t.dataset.themeChoice);
   if (t.dataset.tool) openTool(t.dataset.tool);
   if (t.dataset.rotate) rotateSelected(t.dataset.rotate === "cw");
+  if (t.dataset.rate) {   // a star in the list: only that file
+    const f = S.files.find((x) => x.name === t.closest("[data-rate-file]")?.dataset.rateFile);
+    const n = Number(t.dataset.rate);
+    if (f) rateFiles([f], (f.rating || 0) === n ? 0 : n);
+  }
+  if (t.dataset.rateSel) {   // a star in the Editor: the selected files
+    const chosen = selectedFiles(), n = Number(t.dataset.rateSel);
+    rateFiles(chosen, commonRating(chosen) === n ? 0 : n);
+  }
+  if (t.dataset.rateQl) {    // a star in the large preview: the shown file
+    const f = S.files.find((x) => x.name === S.preview), n = Number(t.dataset.rateQl);
+    if (f) rateFiles([f], (f.rating || 0) === n ? 0 : n);
+  }
   if (t.dataset.star) toggleFavorite(t.dataset.star);
   if (t.dataset.action === "gear-add") addGear(t.dataset.kind);
   if (t.dataset.gearEdit) { gearEdit = { kind: t.dataset.gearEdit, name: t.dataset.name }; renderGearLists(); }
@@ -1717,6 +1800,11 @@ document.addEventListener("keydown", (e) => {
     else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); stepPreview(1); }
     else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "r" || e.key === "R")) { e.preventDefault(); if (!e.repeat) rotatePreview(true); }
     else if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "l" || e.key === "L")) { e.preventDefault(); if (!e.repeat) rotatePreview(false); }
+    else if (!e.metaKey && !e.ctrlKey && !e.altKey && /^[0-5]$/.test(e.key)) {
+      e.preventDefault();
+      const f = S.files.find((x) => x.name === S.preview);
+      if (f && !e.repeat) rateFiles([f], Number(e.key));
+    }
     return;
   }
   if (e.key === "Enter" && S.modal === "film" && e.target.tagName === "INPUT") { e.preventDefault(); saveFilm(); return; }
@@ -1724,6 +1812,12 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && ["r", "l"].includes(e.key.toLowerCase()) && !S.modal && S.tab === "manager" && S.folder) {
     e.preventDefault();   // also keeps the web view from reloading itself
     if (!isTyping(e.target) && !hasEdits() && !e.repeat) rotateSelected(e.key.toLowerCase() === "r");
+    return;
+  }
+  // Cmd+1 to Cmd+5 rate the selected pictures, Cmd+0 removes the rating
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && /^[0-5]$/.test(e.key) && !S.modal && S.tab === "manager" && S.folder && !S.loading) {
+    e.preventDefault();
+    if (!isTyping(e.target) && !e.repeat && S.selected.size) rateFiles(selectedFiles(), Number(e.key));
     return;
   }
   // Space does not scroll the page any more; in the file list it opens the quick look

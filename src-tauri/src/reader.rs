@@ -1,8 +1,8 @@
 //! Read-only access for the file list: what is already written in each image,
 //! and small preview pictures. Nothing here ever changes a file.
 
-use crate::processor::{collect_images, file_name, is_jpeg, read_orientation, XMP_HEADER};
-use img_parts::jpeg::{markers, Jpeg};
+use crate::processor::{collect_images, file_name, is_jpeg, read_orientation, read_xmp_packet, xmp_value};
+use img_parts::jpeg::Jpeg;
 use img_parts::Bytes;
 use little_exif::exif_tag::ExifTag;
 use little_exif::metadata::Metadata;
@@ -21,6 +21,7 @@ pub struct FileInfo {
     camera: String,
     lens: String,
     film: String,
+    rating: u8,   // 0 = none, 1–5 stars (JPEG only)
     date: String, // "YYYY-MM-DD HH:MM:SS", empty if unknown
     aspect: f64,  // width / height as the picture is shown (after Rotate), 1.5 for a normal landscape frame
 }
@@ -42,26 +43,15 @@ fn pretty_date(exif_date: &str) -> String {
     chars.into_iter().collect()
 }
 
-fn xml_unescape(text: &str) -> String {
-    text.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&amp;", "&")
-}
-
-/// The film stock of a JPEG lives in the XMP packet as xmp:Label.
-fn read_xmp_label(path: &Path) -> Option<String> {
-    let data = fs::read(path).ok()?;
-    let jpeg = Jpeg::from_bytes(Bytes::from(data)).ok()?;
-    for segment in jpeg.segments() {
-        if segment.marker() == markers::APP1 && segment.contents().starts_with(XMP_HEADER) {
-            let packet = String::from_utf8_lossy(&segment.contents()[XMP_HEADER.len()..]).into_owned();
-            let start = packet.find("xmp:Label=\"")? + "xmp:Label=\"".len();
-            let end = packet[start..].find('"')? + start;
-            return Some(clean(&xml_unescape(&packet[start..end])));
-        }
-    }
-    None
+/// The film stock of a JPEG lives in the XMP packet as xmp:Label, the star rating as xmp:Rating.
+fn read_xmp(path: &Path) -> (Option<String>, u8) {
+    let Ok(data) = fs::read(path) else { return (None, 0) };
+    let Ok(jpeg) = Jpeg::from_bytes(Bytes::from(data)) else { return (None, 0) };
+    let Some(packet) = read_xmp_packet(&jpeg) else { return (None, 0) };
+    let label = xmp_value(&packet, "xmp:Label").map(|l| clean(&l));
+    // -1 means "rejected" in some programs; that is no star rating
+    let rating = xmp_value(&packet, "xmp:Rating").and_then(|r| r.trim().parse::<u8>().ok()).filter(|r| *r <= 5).unwrap_or(0);
+    (label, rating)
 }
 
 /// Width / height as the picture is meant to be seen. 1.5 if the size cannot be read.
@@ -91,7 +81,9 @@ fn read_info(path: &Path) -> FileInfo {
     // Lab scans often have no EXIF at all – then everything stays empty
     let Ok(exif) = Metadata::new_from_path(path) else {
         if is_jpeg(path) {
-            info.film = read_xmp_label(path).unwrap_or_default();
+            let (film, rating) = read_xmp(path);
+            info.film = film.unwrap_or_default();
+            info.rating = rating;
         }
         info.aspect = aspect_from(path, 1);
         return info;
@@ -112,7 +104,9 @@ fn read_info(path: &Path) -> FileInfo {
 
     // Film: JPEG → XMP label, PNG/TIFF → EXIF description (same as when writing)
     if is_jpeg(path) {
-        info.film = read_xmp_label(path).unwrap_or_default();
+        let (film, rating) = read_xmp(path);
+        info.film = film.unwrap_or_default();
+        info.rating = rating;
     } else if let Some(ExifTag::ImageDescription(text)) =
         exif.get_tag(&ExifTag::ImageDescription(String::new())).next()
     {
@@ -260,6 +254,14 @@ mod tests {
         assert_eq!(infos[0].name, "scan_1.jpg");
         assert_eq!((infos[0].camera.as_str(), infos[0].lens.as_str()), ("", ""));
         assert_eq!((infos[0].film.as_str(), infos[0].date.as_str()), ("", ""));
+    }
+
+    #[test]
+    fn star_rating_is_read_back_and_stays_zero_without_one() {
+        let dir = tiny_jpeg_folder("rating", 2);
+        crate::processor::rate_in(&dir, &["scan_2.jpg".to_string()], 4, &|_| {}).unwrap();
+        let infos: Vec<FileInfo> = collect_images(&dir).unwrap().iter().map(|p| read_info(p)).collect();
+        assert_eq!((infos[0].rating, infos[1].rating), (0, 4));
     }
 
     #[test]

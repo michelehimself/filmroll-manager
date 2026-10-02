@@ -420,22 +420,75 @@ fn parse_film_iso(film: &str) -> Option<u16> {
         .find(|iso| STANDARD_ISO.contains(iso))
 }
 
-/// Stores the film stock as xmp:Label inside the JPEG.
+/// One value out of an XMP packet, written either as attribute (`xmp:Label="x"`) or as element
+/// (`<xmp:Label>x</xmp:Label>`). Both forms are common.
+pub(crate) fn xmp_value(packet: &str, name: &str) -> Option<String> {
+    let attr = format!("{name}=\"");
+    if let Some(start) = packet.find(&attr) {
+        let start = start + attr.len();
+        let end = packet[start..].find('"')? + start;
+        return Some(xml_unescape(&packet[start..end]));
+    }
+    let open = format!("<{name}>");
+    let start = packet.find(&open)? + open.len();
+    let end = packet[start..].find('<')? + start;
+    Some(xml_unescape(&packet[start..end]))
+}
+
+fn xml_unescape(text: &str) -> String {
+    text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&")
+}
+
+/// The XMP packet of a JPEG as text, if it has one.
+pub(crate) fn read_xmp_packet(jpeg: &Jpeg) -> Option<String> {
+    jpeg.segments()
+        .iter()
+        .find(|s| s.marker() == markers::APP1 && s.contents().starts_with(XMP_HEADER))
+        .map(|s| String::from_utf8_lossy(&s.contents()[XMP_HEADER.len()..]).into_owned())
+}
+
+/// What to do with one XMP value: leave it as it is, set it, or remove it.
+pub(crate) enum Change<T> {
+    Keep,
+    Set(T),
+    Remove,
+}
+
+/// Stores the film stock (xmp:Label) and the star rating (xmp:Rating) inside the JPEG.
 /// Only the metadata segment changes – image data stays byte-identical.
-/// `None` removes the label.
-fn write_xmp_film_label(path: &Path, film: Option<&str>) -> Result<(), String> {
+/// The value that is not being changed is carried over from the existing packet,
+/// so writing the film never loses the rating and the other way round.
+fn write_xmp(path: &Path, label: Change<&str>, rating: Change<u8>) -> Result<(), String> {
     let data = fs::read(path).map_err(|e| e.to_string())?;
     let mut jpeg = Jpeg::from_bytes(Bytes::from(data)).map_err(|e| e.to_string())?;
+
+    let old = read_xmp_packet(&jpeg).unwrap_or_default();
+    let label = match label {
+        Change::Keep => xmp_value(&old, "xmp:Label").filter(|l| !l.trim().is_empty()),
+        Change::Set(l) => Some(l.to_string()),
+        Change::Remove => None,
+    };
+    let rating = match rating {
+        Change::Keep => xmp_value(&old, "xmp:Rating").and_then(|r| r.trim().parse::<u8>().ok()).filter(|r| (1..=5).contains(r)),
+        Change::Set(r) => Some(r.clamp(1, 5)),
+        Change::Remove => None,
+    };
 
     // Replace an earlier XMP packet instead of stacking a second one
     jpeg.segments_mut().retain(|segment| {
         !(segment.marker() == markers::APP1 && segment.contents().starts_with(XMP_HEADER))
     });
 
-    if let Some(film) = film {
+    if label.is_some() || rating.is_some() {
+        let mut attributes = String::new();
+        if let Some(label) = &label {
+            attributes.push_str(&format!(r#" xmp:Label="{}""#, xml_escape(label)));
+        }
+        if let Some(rating) = rating {
+            attributes.push_str(&format!(r#" xmp:Rating="{rating}""#));
+        }
         let packet = format!(
-            r#"<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:Label="{}"/></rdf:RDF></x:xmpmeta><?xpacket end="w"?>"#,
-            xml_escape(film)
+            r#"<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/"{attributes}/></rdf:RDF></x:xmpmeta><?xpacket end="w"?>"#
         );
         let mut contents = XMP_HEADER.to_vec();
         contents.extend_from_slice(packet.as_bytes());
@@ -454,6 +507,41 @@ fn write_xmp_film_label(path: &Path, film: Option<&str>) -> Result<(), String> {
     let mut output = Vec::new();
     jpeg.encoder().write_to(&mut output).map_err(|e| e.to_string())?;
     fs::write(path, output).map_err(|e| e.to_string())
+}
+
+/// `None` removes the label; a star rating that is already in the file stays.
+fn write_xmp_film_label(path: &Path, film: Option<&str>) -> Result<(), String> {
+    write_xmp(path, film.map_or(Change::Remove, Change::Set), Change::Keep)
+}
+
+/// Quick tool – sets the star rating (1–5, 0 = no rating) of the chosen pictures.
+/// The rating lives in the XMP packet of a JPEG (xmp:Rating), which Apple Photos, Lightroom and
+/// Bridge read. Other formats are left alone; the answer says how many files were written.
+#[tauri::command]
+pub async fn set_rating(app: AppHandle, folder: String, files: Vec<String>, rating: u8) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        rate_in(Path::new(&folder), &files, rating, &|v| emit_progress(&app, v))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+pub(crate) fn rate_in(folder: &Path, only: &[String], rating: u8, progress: &dyn Fn(f64)) -> Result<usize, String> {
+    if rating > 5 {
+        return Err("A rating is 0 to 5 stars.".to_string());
+    }
+    let files = select_images(folder, Some(only))?;
+    let total = files.len().max(1) as f64;
+    let mut written = 0;
+    for (i, file) in files.iter().enumerate() {
+        if is_jpeg(file) {
+            let change = if rating == 0 { Change::Remove } else { Change::Set(rating) };
+            write_xmp(file, Change::Keep, change).map_err(|e| format!("\"{}\": {e}", file_name(file)))?;
+            written += 1;
+        }
+        progress((i + 1) as f64 / total);
+    }
+    Ok(written)
 }
 
 #[derive(Deserialize)]
@@ -1014,5 +1102,72 @@ mod tests {
         assert_eq!(parse_edit_date("2026-05-01").unwrap(), Some("2026:05:01 00:00:00".into()));
         assert_eq!(parse_edit_date("  ").unwrap(), None);
         assert!(parse_edit_date("2026-13-40").is_err());
+    }
+
+    fn xmp_of(path: &Path) -> String {
+        let jpeg = Jpeg::from_bytes(Bytes::from(fs::read(path).unwrap())).unwrap();
+        read_xmp_packet(&jpeg).unwrap_or_default()
+    }
+
+    #[test]
+    fn rating_is_written_and_removed_without_touching_the_picture() {
+        let dir = roll("rating_basic", 2);
+        let before = fs::read(dir.join("scan_1.jpg")).unwrap();
+        assert_eq!(rate_in(&dir, &["scan_1.jpg".into()], 4, &|_| {}).unwrap(), 1);
+        assert_eq!(xmp_value(&xmp_of(&dir.join("scan_1.jpg")), "xmp:Rating").as_deref(), Some("4"));
+        // the other file is untouched, and the picture data of the rated one is the same
+        assert!(xmp_of(&dir.join("scan_2.jpg")).is_empty());
+        let after = fs::read(dir.join("scan_1.jpg")).unwrap();
+        assert!(after.windows(before.len().min(40)).any(|w| w == &before[before.len() - 40..]));
+        // changing it again does not stack a second packet
+        rate_in(&dir, &["scan_1.jpg".into()], 2, &|_| {}).unwrap();
+        assert_eq!(String::from_utf8_lossy(&fs::read(dir.join("scan_1.jpg")).unwrap()).matches("xmp:Rating").count(), 1);
+        // 0 removes it
+        rate_in(&dir, &["scan_1.jpg".into()], 0, &|_| {}).unwrap();
+        assert!(!String::from_utf8_lossy(&fs::read(dir.join("scan_1.jpg")).unwrap()).contains("xmp:Rating"));
+        assert!(rate_in(&dir, &["scan_1.jpg".into()], 6, &|_| {}).is_err());
+    }
+
+    #[test]
+    fn rating_and_film_label_keep_each_other() {
+        let dir = roll("rating_label", 1);
+        let file = dir.join("scan_1.jpg");
+        write_xmp_film_label(&file, Some("Kodak Gold 200")).unwrap();
+        rate_in(&dir, &["scan_1.jpg".into()], 5, &|_| {}).unwrap();
+        let xmp = xmp_of(&file);
+        assert_eq!(xmp_value(&xmp, "xmp:Label").as_deref(), Some("Kodak Gold 200"));
+        assert_eq!(xmp_value(&xmp, "xmp:Rating").as_deref(), Some("5"));
+        // writing a new film keeps the stars; removing the film keeps them too
+        write_xmp_film_label(&file, Some("Ilford HP5 Plus 400")).unwrap();
+        write_xmp_film_label(&file, None).unwrap();
+        let xmp = xmp_of(&file);
+        assert_eq!(xmp_value(&xmp, "xmp:Label"), None);
+        assert_eq!(xmp_value(&xmp, "xmp:Rating").as_deref(), Some("5"));
+        // and the other way round: removing the stars keeps a film
+        write_xmp_film_label(&file, Some("Kodak Gold 200")).unwrap();
+        rate_in(&dir, &["scan_1.jpg".into()], 0, &|_| {}).unwrap();
+        let xmp = xmp_of(&file);
+        assert_eq!(xmp_value(&xmp, "xmp:Label").as_deref(), Some("Kodak Gold 200"));
+        assert_eq!(xmp_value(&xmp, "xmp:Rating"), None);
+    }
+
+    #[test]
+    fn rating_survives_rotating_and_saving_list_edits() {
+        let dir = roll("rating_survives", 1);
+        let file = dir.join("scan_1.jpg");
+        rate_in(&dir, &["scan_1.jpg".into()], 3, &|_| {}).unwrap();
+        rotate_in(&dir, &["scan_1.jpg".into()], true, &|_| {}).unwrap();
+        assert_eq!(xmp_value(&xmp_of(&file), "xmp:Rating").as_deref(), Some("3"));
+        write_edits_in(&dir, &[edit("scan_1.jpg", None, None, Some("Kodak Gold 200"), None)], &|_| {}).unwrap();
+        let xmp = xmp_of(&file);
+        assert_eq!(xmp_value(&xmp, "xmp:Rating").as_deref(), Some("3"));
+        assert_eq!(xmp_value(&xmp, "xmp:Label").as_deref(), Some("Kodak Gold 200"));
+    }
+
+    #[test]
+    fn xmp_values_are_found_as_attribute_or_element() {
+        assert_eq!(xmp_value(r#"<rdf:Description xmp:Rating="2"/>"#, "xmp:Rating").as_deref(), Some("2"));
+        assert_eq!(xmp_value("<xmp:Rating>5</xmp:Rating>", "xmp:Rating").as_deref(), Some("5"));
+        assert_eq!(xmp_value("<x/>", "xmp:Rating"), None);
     }
 }

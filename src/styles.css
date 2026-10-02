@@ -241,9 +241,9 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 /* ── File list ──────────────────────────────────── */
 .filelist { flex: 1; min-height: 0; overflow: auto; }
 .row {
-  display: grid; align-items: center; column-gap: 14px;
-  grid-template-columns: 24px 56px minmax(170px, 1.5fr) minmax(110px, 1fr) minmax(110px, 1fr) minmax(110px, 1fr) 176px;
-  min-width: 890px; padding: 6px 20px;
+  display: grid; align-items: center; column-gap: 8px;
+  grid-template-columns: 24px 56px minmax(140px, 1.4fr) minmax(80px, 1fr) minmax(80px, 1fr) minmax(80px, 1fr) 84px 152px;
+  min-width: 784px; padding: 6px 16px;
 }
 .row.head {
   position: sticky; top: 0; z-index: 1;
@@ -274,6 +274,22 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 .cell-input[data-edit="date"] { font-variant-numeric: tabular-nums; }
 .cell-input::placeholder { color: transparent; }
 .cell-input:focus::placeholder { color: var(--placeholder); }
+
+/* Star ratings */
+.rate { display: inline-flex; align-items: center; gap: 1px; }
+.star-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 24px; padding: 0;
+  background: none; border: none; cursor: pointer; color: var(--text-3);
+}
+.star-btn svg { fill: none; transition: fill .1s, color .1s; }
+.star-btn.on { color: var(--accent); }
+.star-btn.on svg { fill: currentColor; }
+.star-btn:not(:disabled):hover { color: var(--accent); }
+.star-btn:disabled { cursor: default; opacity: .4; }
+.quick .star-btn { width: 22px; }
+.cell.rate { overflow: visible; }
+.row.file .star-btn:not(.on) { opacity: .45; }
+.row.file:hover .star-btn:not(.on):not(:disabled) { opacity: 1; }
 
 .editbar { display: flex; align-items: center; gap: 8px; }
 .editbar-text { font-size: 12px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
@@ -472,6 +488,10 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 .ql-actions { grid-column: 2; grid-row: 3; display: flex; align-items: center; justify-content: center; gap: 10px; padding-top: 14px; color: #fff; }
 .ql-action-label { font-size: 12px; opacity: .75; min-width: 86px; }
 .ql-action-label:first-child { text-align: right; }
+.ql-sep { width: 1px; height: 20px; background: rgba(255,255,255,.25); margin: 0 6px; }
+.ql-rate .star-btn { color: rgba(255,255,255,.55); width: 24px; height: 28px; }
+.ql-rate .star-btn.on, .ql-rate .star-btn:not(:disabled):hover { color: #fff; }
+.ql-action-label { white-space: nowrap; }
 .ql-key {
   width: 34px; height: 34px; border-radius: 6px; cursor: pointer; color: #fff;
   font: 600 14px/1 var(--font-ui);
