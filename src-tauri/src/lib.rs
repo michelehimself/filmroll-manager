@@ -3,6 +3,12 @@ mod reader;
 mod sheet;
 mod store;
 
+/// True in the development version (`npm run dev`), false in the installed app.
+#[tauri::command]
+fn is_dev_build() -> bool {
+    cfg!(debug_assertions)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -11,6 +17,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .on_window_event(|_window, event| eprintln!("[window] {event:?}"))
         .invoke_handler(tauri::generate_handler![
+            is_dev_build,
             processor::list_images,
             processor::reverse_order,
             processor::write_metadata,

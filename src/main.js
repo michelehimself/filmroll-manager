@@ -6,6 +6,15 @@ const { listen } = window.__TAURI__.event;
 const { open, ask, save } = window.__TAURI__.dialog;
 const { getCurrentWebview } = window.__TAURI__.webview;
 
+// The development version (npm run dev) is marked with a DEV chip in the title bar, so it cannot be mistaken for the installed app
+let IS_DEV = false;
+invoke("is_dev_build").then((dev) => {
+  if (!dev) return;
+  IS_DEV = true;
+  document.querySelector(".titlebar-version").insertAdjacentHTML("beforebegin", `<span class="dev-badge" title="Development version (npm run dev)">DEV</span>`);
+  if (S.tab === "settings") render();
+}).catch(() => {});
+
 // The version in the title bar is the one the app was built with
 window.__TAURI__.app?.getVersion?.().then((v) => {
   document.querySelector(".titlebar-version").textContent = `v${v}`;
@@ -75,7 +84,7 @@ let pendingUpdate = null;   // the update object from the plugin while one is wa
 const updateApi = () => window.__TAURI__?.updater;
 
 async function checkForUpdate({ silent = false } = {}) {
-  if (S.update.state === "checking" || S.update.state === "installing") return;
+  if (IS_DEV || S.update.state === "checking" || S.update.state === "installing") return;   // the development version is never updated
   S.update = { state: "checking" };
   refreshUpdateUI();
   try {
@@ -806,12 +815,14 @@ function viewSettings() {
         <section class="settings-block">
           <p class="settings-title">Updates</p>
           <p class="settings-hint">Looking for an update asks github.com for the newest version number. No pictures, file names or personal data are sent; GitHub only sees that a request came from your internet connection.</p>
-          <div id="update-box">${updateControls()}</div>
-          <label class="check-line settings-check"><input type="checkbox" data-auto-update${S.store.autoUpdate ? " checked" : ""}> Check for updates when the app starts</label>
+          ${IS_DEV
+            ? `<p class="settings-hint">Updates are turned off in the development version.</p>`
+            : `<div id="update-box">${updateControls()}</div>
+          <label class="check-line settings-check"><input type="checkbox" data-auto-update${S.store.autoUpdate ? " checked" : ""}> Check for updates when the app starts</label>`}
         </section>
         <section class="settings-block">
           <p class="settings-title">About</p>
-          <div class="about-row"><span>Version</span><span>${esc(version.replace(/^v/, ""))}</span></div>
+          <div class="about-row"><span>Version</span><span>${esc(version.replace(/^v/, ""))}${IS_DEV ? " (development)" : ""}</span></div>
           <div class="about-row"><span>Privacy</span><span>Your pictures never leave this computer. Nothing is uploaded or tracked.</span></div>
         </section>
       </div>

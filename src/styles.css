@@ -125,6 +125,7 @@ button { font-family: inherit; }
 }
 .titlebar-title   { font-size: 13px; font-weight: 600; color: var(--text); }
 .titlebar-sub     { font-size: 11px; color: var(--text-3); }
+.dev-badge { margin-right: 8px; padding: 1px 6px; border: 1px solid var(--accent); border-radius: 6px; font-size: 10px; font-weight: 600; letter-spacing: .04em; color: var(--accent); }
 .titlebar-version { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 
 /* ── Section navigation (left) ──────────────────── */
