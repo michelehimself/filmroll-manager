@@ -436,7 +436,7 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 .search input::placeholder { color: var(--placeholder); }
 .btn-ghost.on { background: var(--bg-selected); color: var(--text); border-color: var(--text-3); }
 
-.film-group { display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 24px; }
+.film-group { display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 24px; margin-bottom: 28px; }   /* space after the last film of a manufacturer */
 .film-group-body { min-width: 0; }
 .film-logo {
   position: sticky; top: 12px; width: 96px; aspect-ratio: 180 / 110; margin-top: 12px;
