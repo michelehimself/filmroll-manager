@@ -1115,6 +1115,21 @@ function viewFilms() {
     </div>`;
 }
 
+// Manufacturer logos live in src/logos/<name>.png (lower case, letters and digits only, e.g. kodak.png).
+// A brand without a file (or an own brand) gets a tile with its first letter instead.
+const LOGO_BRANDS = ["adox", "agfaphoto", "cinestill", "foma", "fujifilm", "harman", "ilford", "kentmere", "kodak", "lomography", "rollei"];
+const brandSlug = (brand) => brand.toLowerCase().replace(/[^a-z0-9]/g, "");
+const letterTile = (brand) => `<span class="film-logo-letter">${esc(brand.charAt(0).toUpperCase())}</span>`;
+const brandLogo = (brand) => {
+  const slug = brandSlug(brand);
+  return `<div class="film-logo" title="${esc(brand)}">${LOGO_BRANDS.includes(slug) ? `<img src="logos/${slug}.png" alt="${esc(brand)}" data-brand="${esc(brand)}">` : letterTile(brand)}</div>`;
+};
+// A missing logo file falls back to the letter tile (image errors do not bubble, so listen while capturing)
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (img?.tagName === "IMG" && img.closest?.(".film-logo")) img.replaceWith(Object.assign(document.createElement("span"), { className: "film-logo-letter", textContent: (img.dataset.brand || "?").charAt(0).toUpperCase() }));
+}, true);
+
 function renderFilmList() {
   const box = $("film-list");
   if (!box) return;
@@ -1134,7 +1149,8 @@ function renderFilmList() {
   shown.forEach((f) => { const b = f.brand || "Other"; if (!brands.includes(b)) brands.push(b); });
   let html = "";
   brands.forEach((brand) => {
-    html += `<div class="film-brand">${esc(brand)}</div>`;
+    // The logo column scrolls with the list and stays in view (sticky) until the next manufacturer starts
+    html += `<div class="film-group"><div class="film-logo-col">${brandLogo(brand)}</div><div class="film-group-body"><div class="film-brand">${esc(brand)}</div>`;
     shown.filter((f) => (f.brand || "Other") === brand).forEach((f) => {
       const full = filmFullName(f), on = isFavorite(full);
       html += `
@@ -1148,6 +1164,7 @@ function renderFilmList() {
           <button class="icon-btn" data-film-remove="${esc(full)}" aria-label="Remove ${esc(full)}">${IC.trash}</button>` : ""}</div>
       </div>`;
     });
+    html += `</div></div>`;
   });
   html += `<p class="film-note">Missing a film? Add your own with “Add Film”. You can also type any name in the Film field.</p>`;
   box.innerHTML = html;

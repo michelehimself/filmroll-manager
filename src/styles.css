@@ -436,6 +436,15 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 .search input::placeholder { color: var(--placeholder); }
 .btn-ghost.on { background: var(--bg-selected); color: var(--text); border-color: var(--text-3); }
 
+.film-group { display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 24px; }
+.film-group-body { min-width: 0; }
+.film-logo {
+  position: sticky; top: 12px; width: 96px; aspect-ratio: 180 / 110; margin-top: 12px;
+  border-radius: 6px; overflow: hidden; background: var(--surface); border: 1px solid var(--border-soft);
+  display: flex; align-items: center; justify-content: center;
+}
+.film-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.film-logo-letter { font-size: 26px; font-weight: 600; color: var(--text-2); background: var(--bg-selected); width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 .film-brand {
   position: sticky; top: 0; z-index: 1; background: var(--bg);
   padding: 16px 0 6px; font-size: 11px; font-weight: 600; color: var(--text-3);
