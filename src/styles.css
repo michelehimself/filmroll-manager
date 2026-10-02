@@ -170,6 +170,8 @@ button { font-family: inherit; }
 .settings-check { margin-top: 2px; }
 .tab.nav-settings { position: relative; }
 .tab.nav-settings.has-update::after { content: ""; position: absolute; top: 6px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.legal-links { display: flex; gap: 18px; }
+.legal-link { color: var(--text-3); cursor: default; }   /* not active yet: the pages do not exist */
 .about-row { display: flex; gap: 12px; font-size: 13px; color: var(--text-2); padding: 7px 0; border-bottom: 1px solid var(--border-soft); }
 .about-row span:first-child { width: 90px; color: var(--text-3); }
 
@@ -286,20 +288,27 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 .cell-input:focus::placeholder { color: var(--placeholder); }
 
 /* Star ratings */
-.rate { display: inline-flex; align-items: center; gap: 1px; }
+.rate { display: inline-flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 1px; }   /* row-reverse: flex-end is the left side */
 .star-btn {
   display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 24px; padding: 0;
   background: none; border: none; cursor: pointer; color: var(--text-3);
 }
 .star-btn svg { fill: none; transition: fill .1s, color .1s; }
-.star-btn.on { color: var(--text); }   /* filled stars are white in dark mode (dark in light mode); only hover is blue */
+.star-btn.on { color: var(--text); }   /* filled stars are white in dark mode (dark in light mode) */
 .star-btn.on svg { fill: currentColor; }
-.star-btn:not(:disabled):hover { color: var(--accent); }
 .star-btn:disabled { cursor: default; opacity: .4; }
 .quick .star-btn { width: 22px; }
+/* Like Lightroom: while the mouse is over the stars, the rating that a click would set is shown –
+   the hovered star and all stars before it are filled blue, the ones after it are empty */
+.rate:hover .star-btn:not(:disabled) { color: var(--text-3); }
+.rate:hover .star-btn:not(:disabled) svg { fill: none; }
+.rate .star-btn:not(:disabled):hover,
+.rate .star-btn:not(:disabled):hover ~ .star-btn:not(:disabled) { color: var(--accent); }
+.rate .star-btn:not(:disabled):hover svg,
+.rate .star-btn:not(:disabled):hover ~ .star-btn:not(:disabled) svg { fill: currentColor; }
 .cell.rate { overflow: visible; }
 .row.file .star-btn:not(.on) { opacity: .45; }
-.row.file:hover .star-btn:not(.on):not(:disabled) { opacity: 1; }
+.row.file:hover .star-btn:not(.on):not(:disabled), .row.file .rate:hover .star-btn:not(:disabled) { opacity: 1; }
 
 .editbar { display: flex; align-items: center; gap: 8px; }
 .editbar-text { font-size: 12px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
@@ -501,7 +510,9 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 .ql-action-label:first-child { text-align: right; }
 .ql-sep { width: 1px; height: 20px; background: rgba(255,255,255,.25); margin: 0 6px; }
 .ql-rate .star-btn { color: rgba(255,255,255,.55); width: 24px; height: 28px; }
-.ql-rate .star-btn.on, .ql-rate .star-btn:not(:disabled):hover { color: #fff; }
+.ql-rate .star-btn.on { color: #fff; }
+.ql-rate:hover .star-btn:not(:disabled) { color: rgba(255,255,255,.55); }
+.ql-rate .star-btn:not(:disabled):hover, .ql-rate .star-btn:not(:disabled):hover ~ .star-btn:not(:disabled) { color: var(--accent); }
 .ql-action-label { white-space: nowrap; }
 .ql-key {
   width: 34px; height: 34px; border-radius: 6px; cursor: pointer; color: #fff;

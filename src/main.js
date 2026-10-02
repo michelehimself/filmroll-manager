@@ -416,7 +416,8 @@ function commonRating(files) {
 
 // Five star buttons; `attr` says what a click means (data-rate="file name", data-rate-sel, data-rate-ql)
 function starButtons(rating, attr, disabled, icon) {
-  return [1, 2, 3, 4, 5].map((n) =>
+  // Written 5 to 1 and shown 1 to 5 (row-reverse): hovering a star then lights up that star and all before it, in plain CSS
+  return [5, 4, 3, 2, 1].map((n) =>
     `<button class="star-btn${n <= rating ? " on" : ""}" ${attr}="${n}" tabindex="-1" ${disabled ? `disabled title="${NO_JPEG}"` : `title="${n} star${n === 1 ? "" : "s"}"`} aria-label="${n} star${n === 1 ? "" : "s"}">${icon}</button>`
   ).join("");
 }
@@ -774,7 +775,7 @@ function viewNav() {
 }
 
 function render() {
-  $("snackbar").classList.toggle("with-sidebar", S.tab === "manager");
+  $("snackbar").classList.toggle("with-sidebar", S.tab === "manager" && !!S.folder);   // the message sits over the file list only
   const view = $("view");
   const scroll = document.querySelector(".filelist")?.scrollTop ?? 0;
   if (S.tab === "manager") view.innerHTML = viewNav() + viewManager();
@@ -821,9 +822,14 @@ function viewSettings() {
           <label class="check-line settings-check"><input type="checkbox" data-auto-update${S.store.autoUpdate ? " checked" : ""}> Check for updates when the app starts</label>`}
         </section>
         <section class="settings-block">
+          <p class="settings-title">Keyboard</p>
+          <button class="btn btn-ghost" data-action="show-shortcuts">${IC.keyboard}<span style="margin-left:8px">Show shortcuts</span></button>
+        </section>
+        <section class="settings-block">
           <p class="settings-title">About</p>
           <div class="about-row"><span>Version</span><span>${esc(version.replace(/^v/, ""))}${IS_DEV ? " (development)" : ""}</span></div>
           <div class="about-row"><span>Privacy</span><span>Your pictures never leave this computer. Nothing is uploaded or tracked.</span></div>
+          <div class="about-row"><span>Legal</span><span class="legal-links"><span class="legal-link" aria-disabled="true" title="Coming soon">Legal Notice</span><span class="legal-link" aria-disabled="true" title="Coming soon">Privacy Policy</span></span></div>
         </section>
       </div>
     </div>`;
@@ -841,7 +847,7 @@ function viewPlaceholder(icon, title, text) {
 }
 
 function viewManager() {
-  return `<div class="manager">${S.folder ? viewExplorer() : viewDropArea()}${viewEditor()}</div>`;
+  return `<div class="manager">${S.folder ? viewExplorer() + viewEditor() : viewDropArea()}</div>`;
 }
 
 function viewEditor() {
