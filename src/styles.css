@@ -12,6 +12,7 @@
   --bg:            #FAFAF8;
   --bg-chrome:     #F2F0ED;
   --bg-subtle:     #F5F3F0;
+  --bg-selected:   #E9E6E1;
   --surface:       #FFFFFF;
   --border:        #D5D1CB;
   --border-soft:   #E0DDD8;
@@ -32,7 +33,8 @@
   --green-bg:#E6F7EA;  --green-fg:#248C45;  --green-bd:#A8DCBA;
   --orange-bg:#FFF0E8; --orange-fg:#C05020; --orange-bd:#F0C4A8;
 
-  --sidebar-w:     232px;
+  --nav-w:         80px;
+  --sidebar-w:     232px;   /* editor panel */
   --font-ui:   "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;   /* file names */
   /* A printed page is always white, in dark mode too */
@@ -47,6 +49,7 @@
     --bg:            #1E1E1F;
     --bg-chrome:     #2A2A2B;
     --bg-subtle:     #262627;
+    --bg-selected:   #3A3A3C;
     --surface:       #2C2C2E;
     --border:        #444446;
     --border-soft:   #3A3A3C;
@@ -97,20 +100,22 @@ button { font-family: inherit; }
 .titlebar-sub     { font-size: 11px; color: var(--text-3); }
 .titlebar-version { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 
-/* ── Tab bar ────────────────────────────────────── */
-.tabbar {
-  flex-shrink: 0; display: flex; justify-content: center; gap: 6px;
-  padding: 8px 24px; background: var(--bg-subtle); border-bottom: 1px solid var(--border);
+/* ── Section navigation (left) ──────────────────── */
+.nav {
+  width: var(--nav-w); flex-shrink: 0; padding: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--bg-subtle); border-right: 1px solid var(--border);
 }
 .tab {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 6px 16px; border-radius: 6px; border: 1px solid transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  height: 64px; border-radius: 6px; border: 1px solid transparent;
   background: transparent; color: var(--text-2);
-  font-size: 13px; font-weight: 500; cursor: pointer;
+  font-size: 11px; font-weight: 500; cursor: pointer;
   transition: background .14s, color .14s;
 }
+.tab svg { width: 24px; height: 24px; }
 .tab:hover { background: var(--border-soft); }
-.tab.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.tab.active { background: var(--bg-selected); color: var(--text); }
 
 /* ── Views ──────────────────────────────────────── */
 .view { flex: 1; min-height: 0; display: flex; }
@@ -133,7 +138,7 @@ button { font-family: inherit; }
 
 .sidebar {
   width: var(--sidebar-w); flex-shrink: 0; overflow-y: auto;
-  background: var(--bg-subtle); border-right: 1px solid var(--border);
+  background: var(--bg-subtle); border-left: 1px solid var(--border);
   padding: 18px 14px; display: flex; flex-direction: column; gap: 8px;
 }
 .sidebar-section { display: flex; flex-direction: column; gap: 8px; }
@@ -145,7 +150,7 @@ button { font-family: inherit; }
   background: var(--surface); border: 1px solid var(--border-soft); color: var(--text);
   transition: border-color .14s, background .14s;
 }
-.tool:not(:disabled):hover { border-color: var(--accent); background: var(--accent-soft); }
+.tool:not(:disabled):hover { border-color: var(--border); background: var(--bg-subtle); }
 .tool:disabled { opacity: .45; cursor: not-allowed; }
 .tool-icon { display: flex; color: var(--accent); flex-shrink: 0; }
 .tool-text { min-width: 0; }
@@ -166,9 +171,10 @@ button { font-family: inherit; }
 .toolbar-folder .count { font-size: 12px; color: var(--text-3); white-space: nowrap; }
 .toolbar-spacer { flex: 1; }
 .folder-tools { display: flex; align-items: center; gap: 8px; }
-.quick { display: flex; align-items: center; gap: 6px; }
-.tool-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
-.quick-label { font-size: 11px; font-weight: 600; color: var(--text-3); margin-right: 2px; }
+.quick { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.quick-btns { display: flex; gap: 6px; }
+.editor-title { font-size: 13px; font-weight: 600; padding: 0 4px 4px; }
+.quick-label { font-size: 11px; font-weight: 600; color: var(--text-3); }
 .btn.square { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 
 [hidden] { display: none !important; }
@@ -187,11 +193,11 @@ button { font-family: inherit; }
 }
 .row.file { border-bottom: 1px solid var(--border-soft); height: 56px; }
 .row.file:hover { background: var(--bg-subtle); }
-.row.file.selected { background: var(--accent-soft); }
+.row.file.selected { background: var(--bg-selected); }
 .row.file { cursor: default; }
 .check { display: flex; align-items: center; justify-content: center; }
 .check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
-.scope { font-size: 12px; font-weight: 500; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; }
+.scope { font-size: 12px; font-weight: 500; color: var(--text-2); background: var(--bg-selected); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; }
 .cell { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; -webkit-user-select: text; }
 .cell.name { font-weight: 500; font-family: var(--font-mono); font-size: 12px; }
 .cell.date { color: var(--text-2); font-variant-numeric: tabular-nums; }
@@ -205,26 +211,26 @@ button { font-family: inherit; }
 }
 .row.file:hover .cell-input { border-color: var(--border-soft); }
 .cell-input:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px var(--accent-ring); }
-.cell-input.changed { background: var(--accent-soft); border-color: var(--accent); }
+.cell-input.changed { background: var(--bg-selected); border-color: var(--text-3); }
 .cell-input[data-edit="date"] { font-variant-numeric: tabular-nums; }
 .cell-input::placeholder { color: transparent; }
 .cell-input:focus::placeholder { color: var(--placeholder); }
 
 .editbar { display: flex; align-items: center; gap: 8px; }
-.editbar-text { font-size: 12px; font-weight: 500; color: var(--accent); white-space: nowrap; }
+.editbar-text { font-size: 12px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
 .shortcuts-btn {
   margin-top: auto; display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px;
   background: transparent; border: 1px solid var(--border-soft); border-radius: 6px; cursor: pointer;
   font-size: 12px; font-weight: 500; color: var(--text-2); transition: background .14s, border-color .14s;
 }
-.shortcuts-btn:hover { background: var(--surface); border-color: var(--accent); color: var(--text); }
+.shortcuts-btn:hover { background: var(--surface); border-color: var(--border); color: var(--text); }
 .shortcuts-btn svg { color: var(--text-3); flex-shrink: 0; }
 .shortcut-group + .shortcut-group { margin-top: 18px; }
 .shortcut-title { font-size: 11px; font-weight: 600; color: var(--text-3); margin-bottom: 6px; }
 .shortcut-row { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
 .shortcut-keys { display: flex; align-items: center; gap: 5px; }
 .shortcut-text { display: flex; align-items: center; gap: 10px; color: var(--text-2); line-height: 1.4; }
-.shortcut-icon { display: flex; flex-shrink: 0; color: var(--accent); }
+.shortcut-icon { display: flex; flex-shrink: 0; color: var(--text-2); }
 .keycap {
   flex-shrink: 0; padding: 2px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
   font: 600 11px/1.3 var(--font-ui); color: var(--text-2);
@@ -249,7 +255,8 @@ button { font-family: inherit; }
   padding: 44px 24px; text-align: center; cursor: pointer;
   background: var(--surface); transition: border-color .15s, background .15s;
 }
-.dropzone:hover, .dropzone.dragging { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone:hover { border-color: var(--text-3); background: var(--bg-subtle); }
+.dropzone.dragging { border-color: var(--accent); background: var(--bg-subtle); }
 .dz-icon  { color: var(--text-3); margin-bottom: 12px; display: flex; justify-content: center; }
 .dropzone.dragging .dz-icon { color: var(--accent); }
 .dz-title { font-size: 15px; font-weight: 500; margin-bottom: 5px; }
@@ -259,12 +266,12 @@ button { font-family: inherit; }
 .recents { margin-top: 28px; }
 .recents-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; font-size: 11px; font-weight: 600; color: var(--text-3); }
 .recent { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; padding-right: 8px; background: var(--surface); border: 1px solid var(--border-soft); border-radius: 8px; transition: border-color .14s; }
-.recent:hover { border-color: var(--accent); }
+.recent:hover { border-color: var(--text-3); }
 .recent-open {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 6px 10px 14px;
   background: none; border: none; text-align: left; cursor: pointer; color: inherit; font: inherit;
 }
-.recent-icon { display: flex; color: var(--accent); flex-shrink: 0; }
+.recent-icon { display: flex; color: var(--text-2); flex-shrink: 0; }
 .recent-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .recent-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-path { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -278,7 +285,7 @@ button { font-family: inherit; }
 .loading-sub { font-size: 12px; color: var(--text-3); }
 
 /* ── Buttons ────────────────────────────────────── */
-.link-btn { background: none; border: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 0; white-space: nowrap; }
+.link-btn { background: none; border: none; color: var(--text-2); text-decoration: underline; font-size: 12px; cursor: pointer; padding: 0; white-space: nowrap; }
 .link-btn:hover { text-decoration: underline; }
 .btn { padding: 6px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 500; cursor: pointer; border: none; transition: background .14s; }
 .btn:disabled { opacity: .38; cursor: not-allowed; }
@@ -303,7 +310,7 @@ button { font-family: inherit; }
   font: inherit; font-size: 12.5px; color: var(--text); user-select: text; -webkit-user-select: text;
 }
 .search input::placeholder { color: var(--placeholder); }
-.btn-ghost.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.btn-ghost.on { background: var(--bg-selected); color: var(--text); border-color: var(--text-3); }
 
 .film-brand {
   position: sticky; top: 0; z-index: 1; background: var(--bg);
@@ -329,7 +336,7 @@ button { font-family: inherit; }
   background: none; border: none; border-radius: 6px; cursor: pointer; color: var(--text-3);
 }
 .star:hover { background: var(--border-soft); color: var(--text-2); }
-.star.on { color: var(--accent); }
+.star.on { color: var(--text); }
 .star.on svg { fill: currentColor; }
 .page-scroll .empty-view { padding: 60px 24px; }
 
@@ -378,7 +385,7 @@ button { font-family: inherit; }
 .suggest-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .suggest-star { display: flex; flex-shrink: 0; color: var(--text-3); }   /* grey, also while the row is highlighted */
 .suggest-star svg { fill: currentColor; }
-.suggest-item:hover, .suggest-item.active { background: var(--accent-soft); color: var(--accent); }
+.suggest-item:hover, .suggest-item.active { background: var(--bg-selected); color: var(--text); }
 .suggest-sep { height: 1px; background: var(--border-soft); margin: 4px 6px; }
 .suggest-empty { padding: 8px 10px; font-size: 12px; color: var(--text-3); }
 
@@ -440,8 +447,8 @@ button { font-family: inherit; }
 .loading-sub { font-variant-numeric: tabular-nums; }
 
 #snackbar { position: fixed; left: 20px; right: 20px; bottom: 18px; z-index: 20; pointer-events: none; }
-/* In the Manager the message sits over the file list only, not over the sidebar */
-#snackbar.with-sidebar { left: calc(var(--sidebar-w) + 20px); }
+/* In the Manager the message sits over the file list only, not over the navigation or the editor */
+#snackbar.with-sidebar { left: calc(var(--nav-w) + 20px); right: calc(var(--sidebar-w) + 20px); }
 .snackbar {
   pointer-events: auto; display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 8px 10px 14px; border-radius: 8px; font-size: 12.5px;
@@ -536,9 +543,8 @@ button { font-family: inherit; }
   font-size: 12.5px; font-weight: 500; line-height: 22px; white-space: nowrap;
 }
 .tpl-editor .tag { margin: 0 2px; vertical-align: middle; user-select: none; -webkit-user-select: none; cursor: default; }
-.tag.blue   { background: var(--blue-bg);   color: var(--blue-fg);   border-color: var(--blue-bd); }
-.tag.green  { background: var(--green-bg);  color: var(--green-fg);  border-color: var(--green-bd); }
-.tag.orange { background: var(--orange-bg); color: var(--orange-fg); border-color: var(--orange-bd); }
+/* Tag colours are neutral on purpose; the three kinds differ only by their label */
+.tag.blue, .tag.green, .tag.orange { background: var(--bg-selected); color: var(--text); border-color: var(--border); }
 .tag-x { background: none; border: none; padding: 0; cursor: pointer; display: inline-flex; align-items: center; color: inherit; opacity: .5; }
 .tag-x:hover { opacity: 1; }
 

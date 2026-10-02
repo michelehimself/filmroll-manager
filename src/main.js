@@ -230,7 +230,7 @@ function updateEditBar() {
   const note = $("sidebar-note");
   if (note) note.hidden = n === 0;
   const folderTools = $("folder-tools");
-  if (folderTools) folderTools.hidden = n > 0;   // Rotate, Open in Finder and Change Folder wait for Save or Discard
+  if (folderTools) folderTools.hidden = n > 0;   // Open in Finder and Change Folder wait for Save or Discard
 }
 
 async function saveEdits() {
@@ -602,17 +602,19 @@ function observeThumbnails() {
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
-function render() {
-  $("tabbar").innerHTML = TABS.map((t) =>
-    `<button class="tab${t.id === S.tab ? " active" : ""}" role="tab" aria-selected="${t.id === S.tab}" data-tab="${t.id}">${t.icon}${t.label}</button>`
-  ).join("");
+function viewNav() {
+  return `<nav class="nav" role="tablist" aria-label="Sections">${TABS.map((t) =>
+    `<button class="tab${t.id === S.tab ? " active" : ""}" role="tab" aria-selected="${t.id === S.tab}" data-tab="${t.id}">${t.icon}<span>${t.label}</span></button>`
+  ).join("")}</nav>`;
+}
 
+function render() {
   $("snackbar").classList.toggle("with-sidebar", S.tab === "manager");
   const view = $("view");
   const scroll = document.querySelector(".filelist")?.scrollTop ?? 0;
-  if (S.tab === "manager") view.innerHTML = viewManager();
-  if (S.tab === "films")   { view.innerHTML = viewFilms(); renderFilmList(); }
-  if (S.tab === "gear")    { view.innerHTML = viewGear(); renderGearLists(); }
+  if (S.tab === "manager") view.innerHTML = viewNav() + viewManager();
+  if (S.tab === "films")   { view.innerHTML = viewNav() + viewFilms(); renderFilmList(); }
+  if (S.tab === "gear")    { view.innerHTML = viewNav() + viewGear(); renderGearLists(); }
   if (S.tab === "manager") {
     const list = document.querySelector(".filelist");
     if (list) list.scrollTop = scroll;
@@ -629,10 +631,10 @@ function viewPlaceholder(icon, title, text) {
 }
 
 function viewManager() {
-  return `<div class="manager">${viewSidebar()}${S.folder ? viewExplorer() : viewDropArea()}</div>`;
+  return `<div class="manager">${S.folder ? viewExplorer() : viewDropArea()}${viewEditor()}</div>`;
 }
 
-function viewSidebar() {
+function viewEditor() {
   const tile = (t) => `
     <button class="tool" data-tool="${t.id}" ${t.ready && S.folder && !hasEdits() ? "" : "disabled"}>
       <span class="tool-icon">${t.icon}</span>
@@ -641,7 +643,15 @@ function viewSidebar() {
     </button>`;
   const sections = SECTIONS.map(([id, label]) =>
     `<div class="sidebar-section"><div class="sidebar-head">${label}</div>${TOOLS.filter((t) => t.section === id).map(tile).join("")}</div>`).join("");
-  return `<aside class="sidebar">${sections}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p><button class="shortcuts-btn" data-action="show-shortcuts">${IC.keyboard}<span>Shortcuts</span></button></aside>`;
+  const rotate = `
+    <div class="quick" role="group" aria-label="Rotate photo">
+      <span class="quick-label">Rotate Photo</span>
+      <span class="quick-btns">
+        <button class="btn btn-ghost square" data-rotate="ccw" title="Rotate counterclockwise (${MOD}+L)" aria-label="Rotate selected files counterclockwise" disabled>${IC.rotateCcw}</button>
+        <button class="btn btn-ghost square" data-rotate="cw" title="Rotate clockwise (${MOD}+R)" aria-label="Rotate selected files clockwise" disabled>${IC.rotateCw}</button>
+      </span>
+    </div>`;
+  return `<aside class="sidebar editor"><div class="editor-title">Editor</div>${rotate}${sections}<p class="sidebar-note" id="sidebar-note"${hasEdits() ? "" : " hidden"}>Save or discard your changes in the list to use these tools.</p><button class="shortcuts-btn" data-action="show-shortcuts">${IC.keyboard}<span>Shortcuts</span></button></aside>`;
 }
 
 // ── Recent folders (shown on the Select Folder page) ──────────────────────────
@@ -770,12 +780,6 @@ function viewExplorer() {
           <button class="btn btn-primary" id="save-edits" data-action="save-edits">Save Changes</button>
         </div>
         <div class="folder-tools" id="folder-tools">
-          <div class="quick" role="group" aria-label="Quick tools">
-            <span class="quick-label">Rotate</span>
-            <button class="btn btn-ghost square" data-rotate="ccw" title="Rotate counterclockwise (${MOD}+L)" aria-label="Rotate selected files counterclockwise" disabled>${IC.rotateCcw}</button>
-            <button class="btn btn-ghost square" data-rotate="cw" title="Rotate clockwise (${MOD}+R)" aria-label="Rotate selected files clockwise" disabled>${IC.rotateCw}</button>
-          </div>
-          <span class="tool-sep" aria-hidden="true"></span>
           <button class="btn btn-ghost" data-action="open-folder">${FILE_MANAGER_LABEL}</button>
           <button class="btn btn-ghost" data-action="pick-folder">Change Folder…</button>
         </div>
