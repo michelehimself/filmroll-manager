@@ -91,7 +91,7 @@ let S = {
   busy: false,    // a tool is writing to the files
   meta: { camera: "", lens: "", film: "", date: todayString(), time: "12:00" },
   rename: { date: "", film: "" },
-  sheet: { title: "", subtitle: "", scannedAt: "", orientation: "portrait", columns: "auto", showNames: false },   // values behind the Date and Film Name tags
+  sheet: { title: "", subtitle: "", scannedAt: "", orientation: "portrait", columns: "auto", showNames: false, punched: false },   // values behind the Date and Film Name tags
   template: [],                      // [{ kind, value? }]
   store: { favorites: [], cameras: [], lenses: [], customFilms: [], recentFolders: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
@@ -1286,6 +1286,7 @@ const sheetOptions = () => ({
   landscape: S.sheet.orientation === "landscape",
   columns: S.sheet.columns === "auto" ? null : Number(S.sheet.columns),
   showNames: S.sheet.showNames,
+  punched: S.sheet.punched,
   title: S.sheet.title,
   subtitle: S.sheet.subtitle,
   scannedAt: S.sheet.scannedAt,
@@ -1315,6 +1316,7 @@ function bodySheet() {
         ${select("orientation", "Page", [["portrait", "A4 portrait"], ["landscape", "A4 landscape"]])}
         ${select("columns", "Frames per row", columns)}
         <label class="check-line"><input type="checkbox" data-model="sheet.showNames"${S.sheet.showNames ? " checked" : ""}> Show file names</label>
+        <label class="check-line"><input type="checkbox" data-model="sheet.punched"${S.sheet.punched ? " checked" : ""}> Leave room for hole punch</label>
         <div class="hint-box">Everything always fits on a single page. The frame number is printed below each picture.</div>
       </div>
       <div class="sheet-preview" id="sheet-preview" aria-label="Preview of the contact sheet"></div>
@@ -1351,11 +1353,11 @@ async function renderSheetPreview() {
 
   let html = `<div class="sheet-page" style="width:${px(layout.pageW)};height:${px(layout.pageH)}">`;
   if (layout.hasHeader) {
-    const line = (text, baseline, size, cls) => baseline == null ? "" : `<div class="sheet-text ${cls}" style="left:${px(layout.margin)};top:${px(baseline - size * 0.3528 * 0.85)};width:${px(layout.pageW - 2 * layout.margin)};font-size:${ptPx(size)}">${esc(text)}</div>`;
+    const line = (text, baseline, size, cls) => baseline == null ? "" : `<div class="sheet-text ${cls}" style="left:${px(layout.marginLeft)};top:${px(baseline - size * 0.3528 * 0.85)};width:${px(layout.pageW - layout.marginLeft - layout.margin)};font-size:${ptPx(size)}">${esc(text)}</div>`;
     html += line(S.sheet.title.trim(), layout.titleBaseline, layout.titlePt, "title");
     html += line(S.sheet.subtitle.trim(), layout.subtitleBaseline, layout.subtitlePt, "subtitle");
     html += line(layout.scanText, layout.scanBaseline, layout.subtitlePt, "subtitle");
-    html += `<div class="sheet-rule" style="left:${px(layout.margin)};top:${px(layout.ruleY)};width:${px(layout.pageW - 2 * layout.margin)}"></div>`;
+    html += `<div class="sheet-rule" style="left:${px(layout.marginLeft)};top:${px(layout.ruleY)};width:${px(layout.pageW - layout.marginLeft - layout.margin)}"></div>`;
   }
   layout.cells.forEach((cell, i) => {
     const number = String(i + 1).padStart(digits, "0");

@@ -15,6 +15,8 @@ use tauri::AppHandle;
 const MM_TO_PT: f64 = 72.0 / 25.4;
 const PAGE: (f64, f64) = (210.0, 297.0); // A4 portrait, in mm
 const MARGIN: f64 = 12.0;
+/// Left margin when the sheet is going to be punched for a binder (standard holes sit about 12 mm from the edge)
+const PUNCH_MARGIN: f64 = 22.0;
 const GAP: f64 = 2.5;
 const LABEL_H: f64 = 4.2;
 const TITLE_PT: f64 = 16.0;
@@ -41,6 +43,9 @@ pub struct SheetOptions {
     /// `None` = choose automatically
     columns: Option<u32>,
     show_names: bool,
+    /// Leave extra room on the left for a hole punch
+    #[serde(default)]
+    punched: bool,
     title: String,
     subtitle: String,
     /// Where the film was scanned (free text)
@@ -60,6 +65,8 @@ pub struct Layout {
     page_w: f64,
     page_h: f64,
     margin: f64,
+    /// Left margin; wider than `margin` when the sheet is punched
+    margin_left: f64,
     has_header: bool,
     /// Baseline of each header line; `None` if that line is empty and not drawn
     title_baseline: Option<f64>,
@@ -136,9 +143,10 @@ pub fn layout(aspects: &[f64], options: &SheetOptions) -> Layout {
         }
     }
     let rule_y = last + LAST_BASELINE_TO_RULE;
-    let grid_x = MARGIN;
+    let margin_left = if options.punched { PUNCH_MARGIN } else { MARGIN };
+    let grid_x = margin_left;
     let grid_y = if has_header { rule_y + RULE_TO_GRID } else { MARGIN };
-    let grid_w = page_w - 2.0 * MARGIN;
+    let grid_w = page_w - margin_left - MARGIN;
     let grid_h = page_h - MARGIN - grid_y;
 
     let n = aspects.len().max(1);
@@ -165,6 +173,7 @@ pub fn layout(aspects: &[f64], options: &SheetOptions) -> Layout {
         page_w,
         page_h,
         margin: MARGIN,
+        margin_left,
         has_header,
         title_baseline: baselines[0],
         subtitle_baseline: baselines[1],
@@ -283,13 +292,13 @@ fn build_pdf(layout: &Layout, options: &SheetOptions, names: &[String], pictures
     let mut c = Content::new();
 
     if layout.has_header {
-        let max_w = (layout.page_w - 2.0 * layout.margin) * MM_TO_PT;
+        let max_w = (layout.page_w - layout.margin_left - layout.margin) * MM_TO_PT;
         let mut line = |text: &str, baseline: Option<f64>, font: &'static [u8], size: f64, gray: f32| {
             let Some(baseline) = baseline else { return };
             c.begin_text();
             c.set_fill_gray(gray);
             c.set_font(Name(font), size as f32);
-            c.next_line(pt(layout.margin), y_up(baseline));
+            c.next_line(pt(layout.margin_left), y_up(baseline));
             c.show(Str(&win_ansi(&fit_text(text, size, max_w))));
             c.end_text();
         };
@@ -299,7 +308,7 @@ fn build_pdf(layout: &Layout, options: &SheetOptions, names: &[String], pictures
         c.set_stroke_gray(0.8);
         c.set_line_width(0.5);
         c.set_line_cap(LineCapStyle::ButtCap);
-        c.move_to(pt(layout.margin), y_up(layout.rule_y));
+        c.move_to(pt(layout.margin_left), y_up(layout.rule_y));
         c.line_to(pt(layout.page_w - layout.margin), y_up(layout.rule_y));
         c.stroke();
     }
@@ -398,7 +407,7 @@ mod tests {
 
     fn options() -> SheetOptions {
         SheetOptions {
-            landscape: false, columns: None, show_names: false,
+            landscape: false, columns: None, show_names: false, punched: false,
             title: "Roll 12".into(), subtitle: "Kodak Portra 400 · Pentax 17".into(),
             scanned_at: String::new(),
         }
@@ -407,7 +416,7 @@ mod tests {
     /// Every picture box lies inside the page margins and no two boxes overlap.
     fn assert_fits(layout: &Layout) {
         for (i, a) in layout.cells.iter().enumerate() {
-            assert!(a.x >= layout.margin - 0.001 && a.x + layout.box_w <= layout.page_w - layout.margin + 0.001, "cell {i} sticks out sideways");
+            assert!(a.x >= layout.margin_left - 0.001 && a.x + layout.box_w <= layout.page_w - layout.margin + 0.001, "cell {i} sticks out sideways");
             assert!(a.y + layout.box_h + layout.label_h <= layout.page_h - layout.margin + 0.001, "cell {i} sticks out at the bottom");
             for b in &layout.cells[i + 1..] {
                 let apart_x = (a.x - b.x).abs() >= layout.box_w - 0.001;
@@ -477,6 +486,22 @@ mod tests {
         assert_eq!((only.title_baseline, only.subtitle_baseline), (None, None));
         assert_eq!(only.scan_baseline, Some(FIRST_BASELINE));
         assert_fits(&only);
+    }
+
+    #[test]
+    fn punched_sheet_keeps_the_left_edge_free_and_still_fits() {
+        for landscape in [false, true] {
+            let mut o = options();
+            o.landscape = landscape;
+            o.punched = true;
+            for n in [1, 12, 36, 72] {
+                let l = layout(&vec![1.5; n], &o);
+                assert!(l.margin_left > l.margin);
+                assert_fits(&l);
+                assert!(l.cells.iter().all(|c| c.x >= PUNCH_MARGIN - 0.001), "a picture reaches into the punch area");
+            }
+        }
+        assert_eq!(layout(&[1.5; 6], &options()).margin_left, MARGIN);
     }
 
     #[test]
