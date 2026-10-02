@@ -800,14 +800,15 @@ function viewSettings() {
   const theme = THEMES.some((t) => t[0] === S.store.theme) ? S.store.theme : "system";
   const version = document.querySelector(".titlebar-version")?.textContent ?? "";
   return `
-    <div class="page">
+    <div class="settings-page">
+     <div class="settings-left">
       <div class="page-head">
         <div>
           <p class="step-heading">Settings</p>
           <p class="step-sub">Changes apply right away.</p>
         </div>
       </div>
-      <div class="page-scroll fill"><div class="settings-grid">
+      <div class="page-scroll">
        <div class="settings-main">
         <section class="settings-block">
           <p class="settings-title">Appearance</p>
@@ -837,8 +838,9 @@ function viewSettings() {
           <div class="about-row"><span>Legal</span><span class="legal-links"><span class="legal-link" aria-disabled="true" title="Coming soon">Legal Notice</span><span class="legal-link" aria-disabled="true" title="Coming soon">Privacy Policy</span></span></div>
         </section>
        </div>
-       ${viewAboutMe()}
-      </div></div>
+      </div>
+     </div>
+     ${viewAboutMe()}
     </div>`;
 }
 
@@ -860,7 +862,7 @@ function viewAboutMe() {
     ? `<div class="me-link soon" aria-disabled="true"><span class="me-icon">${l.icon}</span><span class="me-text"><span class="me-label">${l.label}</span><span class="me-sub">${l.sub}</span></span><span class="soon-badge">Coming soon</span></div>`
     : `<button class="me-link" data-open-url="${l.url}" title="Opens in your web browser"><span class="me-icon">${l.icon}</span><span class="me-text"><span class="me-label">${l.label}</span><span class="me-sub">${l.sub}</span></span><span class="me-go">${IC.arrowUpRight}</span></button>`;
   return `
-    <section class="gear-col">
+    <aside class="settings-right"><section class="gear-col">
       <p class="gear-title">About me</p>
       <div class="me-head">
         <div class="me-avatar" aria-hidden="true">${esc(a.name.charAt(0))}</div>
@@ -868,7 +870,7 @@ function viewAboutMe() {
       </div>
       <p class="me-bio">${esc(a.text)}</p>
       <div class="me-links">${a.links.map(link).join("")}</div>
-    </section>`;
+    </section></aside>`;
 }
 
 // Only the links listed in ABOUT_ME can be opened

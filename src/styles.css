@@ -13,6 +13,7 @@
   --bg-chrome:     #F2F0ED;
   --bg-subtle:     #F5F3F0;
   --bg-selected:   #E9E6E1;
+  --star-empty:    #77736D;   /* outline of empty rating stars */
   --surface:       #FFFFFF;
   --border:        #D5D1CB;
   --border-soft:   #E0DDD8;
@@ -52,6 +53,7 @@
     --bg-chrome:     #2A2A2B;
     --bg-subtle:     #262627;
     --bg-selected:   #3A3A3C;
+    --star-empty:    #8A8A8E;
     --surface:       #2C2C2E;
     --border:        #444446;
     --border-soft:   #3A3A3C;
@@ -76,6 +78,7 @@
   --bg-chrome:     #2A2A2B;
   --bg-subtle:     #262627;
   --bg-selected:   #3A3A3C;
+  --star-empty:    #8A8A8E;
   --surface:       #2C2C2E;
   --border:        #444446;
   --border-soft:   #3A3A3C;
@@ -151,9 +154,13 @@ button { font-family: inherit; }
 .tab.nav-settings:hover, .tab.nav-settings.active { color: var(--text); }
 
 /* ── Settings page ──────────────────────────────── */
-.settings-grid { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 33.333%; gap: 40px; align-items: stretch; }
-.settings-main { min-width: 0; max-width: 620px; }
-@media (max-width: 1000px) { .settings-grid { grid-template-columns: 1fr; } }
+.settings-page { flex: 1; min-width: 0; display: flex; }
+.settings-left { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.settings-main { max-width: 620px; }
+/* The About me card runs from the top to the bottom with the same space (28 px) above and below */
+.settings-right { width: 33.333%; flex-shrink: 0; display: flex; padding: 28px 36px 28px 0; }
+.settings-right .gear-col { flex: 1; }
+@media (max-width: 1000px) { .settings-page { flex-direction: column; overflow-y: auto; } .settings-right { width: auto; padding: 0 36px 28px; } }
 .settings-block { margin-bottom: 28px; }
 .settings-block:last-child { margin-bottom: 8px; }
 .settings-title { font-size: 11px; font-weight: 600; color: var(--text-3); margin-bottom: 8px; }
@@ -318,7 +325,7 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 .rate { display: inline-flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 1px; }   /* row-reverse: flex-end is the left side */
 .star-btn {
   display: inline-flex; align-items: center; justify-content: center; width: 17px; height: 24px; padding: 0;
-  background: none; border: none; cursor: pointer; color: var(--text-3);
+  background: none; border: none; cursor: pointer; color: var(--star-empty);
 }
 .star-btn svg { fill: none; transition: fill .1s, color .1s; }
 .star-btn.on { color: var(--text); }   /* filled stars are white in dark mode (dark in light mode) */
@@ -327,14 +334,14 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 .quick .star-btn { width: 22px; }
 /* Like Lightroom: while the mouse is over the stars, the rating that a click would set is shown –
    the hovered star and all stars before it are filled blue, the ones after it are empty */
-.rate:hover .star-btn:not(:disabled) { color: var(--text-3); }
+.rate:hover .star-btn:not(:disabled) { color: var(--star-empty); }
 .rate:hover .star-btn:not(:disabled) svg { fill: none; }
 .rate .star-btn:not(:disabled):hover,
 .rate .star-btn:not(:disabled):hover ~ .star-btn:not(:disabled) { color: var(--accent); }
 .rate .star-btn:not(:disabled):hover svg,
 .rate .star-btn:not(:disabled):hover ~ .star-btn:not(:disabled) svg { fill: currentColor; }
 .cell.rate { overflow: visible; }
-.row.file .star-btn:not(.on) { opacity: .45; }
+.row.file .star-btn:not(.on) { opacity: .8; }
 .row.file:hover .star-btn:not(.on):not(:disabled), .row.file .rate:hover .star-btn:not(:disabled) { opacity: 1; }
 
 .editbar { display: flex; align-items: center; gap: 8px; }
