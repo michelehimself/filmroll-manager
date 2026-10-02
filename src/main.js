@@ -23,6 +23,10 @@ const IC = {
   film:       svg(15, 1.6, `<rect width="18" height="18" x="3" y="3" rx="2"/> <path d="M7 3v18"/> <path d="M3 7.5h4"/> <path d="M3 12h18"/> <path d="M3 16.5h4"/> <path d="M17 3v18"/> <path d="M17 7.5h4"/> <path d="M17 16.5h4"/>`),
   rotateCw:   svg(16, 1.6, `<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/> <path d="M21 3v5h-5"/>`),
   rotateCcw:  svg(16, 1.6, `<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/> <path d="M3 3v5h5"/>`),
+  settings:   svg(18, 1.6, `<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/> <circle cx="12" cy="12" r="3"/>`),
+  sun:        svg(15, 1.6, `<circle cx="12" cy="12" r="4"/> <path d="M12 2v2"/> <path d="M12 20v2"/> <path d="m4.93 4.93 1.41 1.41"/> <path d="m17.66 17.66 1.41 1.41"/> <path d="M2 12h2"/> <path d="M20 12h2"/> <path d="m6.34 17.66-1.41 1.41"/> <path d="m19.07 4.93-1.41 1.41"/>`),
+  moon:       svg(15, 1.6, `<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>`),
+  monitor:    svg(15, 1.6, `<rect width="20" height="14" x="2" y="3" rx="2"/> <path d="M8 21h8"/> <path d="M12 17v4"/>`),
   close:      svg(14, 1.8, `<path d="M18 6 6 18"/> <path d="m6 6 12 12"/>`),
   closeSmall: svg(10, 2, `<path d="M18 6 6 18"/> <path d="m6 6 12 12"/>`),
   maximize:   svg(16, 1.6, `<path d="M8 3H5a2 2 0 0 0-2 2v3"/> <path d="M21 8V5a2 2 0 0 0-2-2h-3"/> <path d="M3 16v3a2 2 0 0 0 2 2h3"/> <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>`),
@@ -46,6 +50,16 @@ const IC = {
 
 const IS_MAC = navigator.userAgent.includes("Mac");
 const MOD = IS_MAC ? "⌘" : "Ctrl";   // the modifier key in shortcuts
+
+// ── Theme: "system" follows the computer, "light" / "dark" force one look ──────
+// The choice is saved in library.json; a copy in localStorage lets the window start in the right look at once.
+const THEMES = [["system", "System", IC.monitor], ["light", "Light", IC.sun], ["dark", "Dark", IC.moon]];
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === "light" || theme === "dark") root.dataset.theme = theme; else delete root.dataset.theme;
+  try { localStorage.setItem("theme", THEMES.some((t) => t[0] === theme) ? theme : "system"); } catch {}
+}
+try { applyTheme(localStorage.getItem("theme") || "system"); } catch { applyTheme("system"); }
 const FILE_MANAGER_LABEL = navigator.userAgent.includes("Mac") ? "Open in Finder"
   : navigator.userAgent.includes("Windows") ? "Open in Explorer" : "Open Folder";
 
@@ -605,7 +619,7 @@ function observeThumbnails() {
 function viewNav() {
   return `<nav class="nav" role="tablist" aria-label="Sections">${TABS.map((t) =>
     `<button class="tab${t.id === S.tab ? " active" : ""}" role="tab" aria-selected="${t.id === S.tab}" data-tab="${t.id}">${t.icon}<span>${t.label}</span></button>`
-  ).join("")}</nav>`;
+  ).join("")}<button class="tab nav-settings${S.tab === "settings" ? " active" : ""}" role="tab" aria-selected="${S.tab === "settings"}" data-tab="settings" title="Settings" aria-label="Settings">${IC.settings}</button></nav>`;
 }
 
 function render() {
@@ -615,6 +629,7 @@ function render() {
   if (S.tab === "manager") view.innerHTML = viewNav() + viewManager();
   if (S.tab === "films")   { view.innerHTML = viewNav() + viewFilms(); renderFilmList(); }
   if (S.tab === "gear")    { view.innerHTML = viewNav() + viewGear(); renderGearLists(); }
+  if (S.tab === "settings") view.innerHTML = viewNav() + viewSettings();
   if (S.tab === "manager") {
     const list = document.querySelector(".filelist");
     if (list) list.scrollTop = scroll;
@@ -624,6 +639,42 @@ function render() {
     if (!S.folder && !S.loading) checkRecents();
   }
   renderModal();
+}
+
+function viewSettings() {
+  const theme = THEMES.some((t) => t[0] === S.store.theme) ? S.store.theme : "system";
+  const version = document.querySelector(".titlebar-version")?.textContent ?? "";
+  return `
+    <div class="page">
+      <div class="page-head">
+        <div>
+          <p class="step-heading">Settings</p>
+          <p class="step-sub">Changes apply right away.</p>
+        </div>
+      </div>
+      <div class="page-scroll">
+        <section class="settings-block">
+          <p class="settings-title">Appearance</p>
+          <p class="settings-label">Theme</p>
+          <p class="settings-hint">System follows the setting of your computer.</p>
+          <div class="segmented" role="radiogroup" aria-label="Theme">
+            ${THEMES.map(([id, label, icon]) => `<button class="${id === theme ? "on" : ""}" role="radio" aria-checked="${id === theme}" data-theme-choice="${id}">${icon}${label}</button>`).join("")}
+          </div>
+        </section>
+        <section class="settings-block">
+          <p class="settings-title">About</p>
+          <div class="about-row"><span>Version</span><span>${esc(version.replace(/^v/, ""))}</span></div>
+          <div class="about-row"><span>Privacy</span><span>Your pictures never leave this computer. Nothing is uploaded or tracked.</span></div>
+        </section>
+      </div>
+    </div>`;
+}
+
+function setTheme(theme) {
+  S.store.theme = theme;
+  applyTheme(theme);
+  saveStore();
+  render();
 }
 
 function viewPlaceholder(icon, title, text) {
@@ -820,11 +871,12 @@ async function loadStore() {
     const films = (v) => (Array.isArray(v) ? v.filter((f) => f && typeof f.name === "string").map((f) => ({
       brand: String(f.brand || ""), name: f.name, iso: String(f.iso || ""), type: FILM_TYPES.includes(f.type) ? f.type : FILM_TYPES[0],
     })) : []);
-    S.store = { ...data, favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses), customFilms: films(data.customFilms), recentFolders: recents(data.recentFolders) };
+    S.store = { ...data, theme: THEMES.some((t) => t[0] === data.theme) ? data.theme : "system", favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses), customFilms: films(data.customFilms), recentFolders: recents(data.recentFolders) };
+    applyTheme(S.store.theme);
   } catch (e) {
     S.storeError = `Your saved favorites could not be loaded: ${e}`;
   }
-  if (S.tab === "films" || S.tab === "gear" || (S.tab === "manager" && !S.folder && !S.loading && !S.modal)) render();
+  if (S.tab === "films" || S.tab === "gear" || S.tab === "settings" || (S.tab === "manager" && !S.folder && !S.loading && !S.modal)) render();
 }
 
 function viewFilms() {
@@ -1581,9 +1633,10 @@ document.addEventListener("click", (e) => {
   // File list: click a row to select, Cmd/Ctrl-click to add, Shift-click for a range
   const row = e.target.closest(".row.file");
   if (row && !e.target.closest("input, button")) { selectRow(row.dataset.row, e); return; }
-  const t = e.target.closest("[data-action],[data-recent],[data-recent-remove],[data-film-edit],[data-film-remove],[data-rotate],[data-tab],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
+  const t = e.target.closest("[data-action],[data-recent],[data-recent-remove],[data-film-edit],[data-film-remove],[data-rotate],[data-tab],[data-theme-choice],[data-tool],[data-star],[data-gear-edit],[data-gear-remove],[data-insert],[data-sep],[data-remove]");
   if (!t || t.disabled) return;
   if (t.dataset.tab && t.dataset.tab !== S.tab) { S.tab = t.dataset.tab; render(); }
+  if (t.dataset.themeChoice) setTheme(t.dataset.themeChoice);
   if (t.dataset.tool) openTool(t.dataset.tool);
   if (t.dataset.rotate) rotateSelected(t.dataset.rotate === "cw");
   if (t.dataset.star) toggleFavorite(t.dataset.star);
