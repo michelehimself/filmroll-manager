@@ -39,7 +39,9 @@ const PDF_PICTURE_QUALITY: u8 = 85;
 #[derive(Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetOptions {
-    landscape: bool,
+    /// `None` = choose automatically (whichever page direction makes the pictures biggest)
+    #[serde(default)]
+    landscape: Option<bool>,
     /// `None` = choose automatically
     columns: Option<u32>,
     show_names: bool,
@@ -64,6 +66,8 @@ pub struct CellPos {
 pub struct Layout {
     page_w: f64,
     page_h: f64,
+    /// Which direction was used (matters when it was chosen automatically)
+    landscape: bool,
     margin: f64,
     /// Left margin; wider than `margin` when the sheet is punched
     margin_left: f64,
@@ -121,8 +125,21 @@ fn choose_columns(n: usize, grid_w: f64, grid_h: f64, aspect: f64) -> usize {
     }
 }
 
+/// Portrait or landscape as chosen; on automatic, the direction that gives the bigger pictures
+/// (portrait wins a tie).
 pub fn layout(aspects: &[f64], options: &SheetOptions) -> Layout {
-    let (page_w, page_h) = if options.landscape { (PAGE.1, PAGE.0) } else { PAGE };
+    match options.landscape {
+        Some(landscape) => layout_on(aspects, options, landscape),
+        None => {
+            let portrait = layout_on(aspects, options, false);
+            let landscape = layout_on(aspects, options, true);
+            if landscape.box_w > portrait.box_w + 0.01 { landscape } else { portrait }
+        }
+    }
+}
+
+fn layout_on(aspects: &[f64], options: &SheetOptions, landscape: bool) -> Layout {
+    let (page_w, page_h) = if landscape { (PAGE.1, PAGE.0) } else { PAGE };
     let scan_text = if options.scanned_at.trim().is_empty() {
         String::new()
     } else {
@@ -172,6 +189,7 @@ pub fn layout(aspects: &[f64], options: &SheetOptions) -> Layout {
     Layout {
         page_w,
         page_h,
+        landscape,
         margin: MARGIN,
         margin_left,
         has_header,
@@ -407,7 +425,7 @@ mod tests {
 
     fn options() -> SheetOptions {
         SheetOptions {
-            landscape: false, columns: None, show_names: false, punched: false,
+            landscape: Some(false), columns: None, show_names: false, punched: false,
             title: "Roll 12".into(), subtitle: "Kodak Portra 400 · Pentax 17".into(),
             scanned_at: String::new(),
         }
@@ -441,12 +459,12 @@ mod tests {
         for landscape in [false, true] {
             for n in [1, 2, 5, 12, 24, 36, 37, 72, 100, 200] {
                 let mut o = options();
-                o.landscape = landscape;
+                o.landscape = Some(landscape);
                 assert_fits(&layout(&vec![1.5; n], &o));
             }
         }
         let mut o = options();
-        o.landscape = true;
+        o.landscape = Some(true);
         assert_eq!((layout(&[1.5; 36], &o).page_w, layout(&[1.5; 36], &o).page_h), (297.0, 210.0));
     }
 
@@ -489,10 +507,30 @@ mod tests {
     }
 
     #[test]
+    fn automatic_page_direction_picks_the_bigger_pictures() {
+        let mut o = options();
+        o.landscape = None;
+        for n in [1, 4, 12, 24, 36, 72] {
+            let aspects = vec![1.5; n];
+            let auto = layout(&aspects, &o);
+            o.landscape = Some(false);
+            let portrait = layout(&aspects, &o);
+            o.landscape = Some(true);
+            let landscape = layout(&aspects, &o);
+            o.landscape = None;
+            assert!(auto.box_w >= portrait.box_w.max(landscape.box_w) - 0.02, "{n} frames: automatic is not the biggest");
+            assert_eq!(auto.landscape, landscape.box_w > portrait.box_w + 0.01);
+            assert_fits(&auto);
+        }
+        // a handful of frames fit better side by side on a landscape page
+        assert!(layout(&[1.5; 4], &o).landscape);
+    }
+
+    #[test]
     fn punched_sheet_keeps_the_left_edge_free_and_still_fits() {
         for landscape in [false, true] {
             let mut o = options();
-            o.landscape = landscape;
+            o.landscape = Some(landscape);
             o.punched = true;
             for n in [1, 12, 36, 72] {
                 let l = layout(&vec![1.5; n], &o);
@@ -541,7 +579,7 @@ mod tests {
         o.scanned_at = "Fotolabor Müller".into();
         o.show_names = true;
         save_in(&dir, None, &o, &dir.join("portrait.pdf"), &|_| {}).unwrap();
-        o.landscape = true;
+        o.landscape = Some(true);
         o.show_names = false;
         save_in(&dir, None, &o, &dir.join("landscape.pdf"), &|_| {}).unwrap();
         for name in ["portrait.pdf", "landscape.pdf"] {

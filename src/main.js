@@ -91,7 +91,7 @@ let S = {
   busy: false,    // a tool is writing to the files
   meta: { camera: "", lens: "", film: "", date: todayString(), time: "12:00" },
   rename: { date: "", film: "" },
-  sheet: { title: "", subtitle: "", scannedAt: "", orientation: "portrait", columns: "auto", showNames: false, punched: false },   // values behind the Date and Film Name tags
+  sheet: { title: "", subtitle: "", scannedAt: "", orientation: "auto", columns: "auto", showNames: false, punched: false },   // values behind the Date and Film Name tags
   template: [],                      // [{ kind, value? }]
   store: { favorites: [], cameras: [], lenses: [], customFilms: [], recentFolders: [] },          // the user's own data, saved by Rust in library.json
   storeError: null,
@@ -1283,7 +1283,7 @@ function prepareSheet() {
 }
 
 const sheetOptions = () => ({
-  landscape: S.sheet.orientation === "landscape",
+  landscape: S.sheet.orientation === "auto" ? null : S.sheet.orientation === "landscape",
   columns: S.sheet.columns === "auto" ? null : Number(S.sheet.columns),
   showNames: S.sheet.showNames,
   punched: S.sheet.punched,
@@ -1313,7 +1313,7 @@ function bodySheet() {
         ${text("title", "Title", "e.g. Roll 12")}
         ${text("subtitle", "Info line", "Film, camera, lens, date")}
         ${text("scannedAt", "Scanned at", "e.g. lab or scanner")}
-        ${select("orientation", "Page", [["portrait", "A4 portrait"], ["landscape", "A4 landscape"]])}
+        ${select("orientation", "Page", [["auto", "Automatic (biggest pictures)"], ["portrait", "A4 portrait"], ["landscape", "A4 landscape"]])}
         ${select("columns", "Frames per row", columns)}
         <label class="check-line"><input type="checkbox" data-model="sheet.showNames"${S.sheet.showNames ? " checked" : ""}> Show file names</label>
         <label class="check-line"><input type="checkbox" data-model="sheet.punched"${S.sheet.punched ? " checked" : ""}> Leave room for hole punch</label>
