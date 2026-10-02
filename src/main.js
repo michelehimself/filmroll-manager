@@ -755,7 +755,7 @@ function viewEditor() {
       ${t.soon ? `<span class="tool-badge">Soon</span>` : ""}
     </button>`;
   const sections = SECTIONS.map(([id, label]) =>
-    `<div class="sidebar-section"><div class="sidebar-head">${label}</div>${TOOLS.filter((t) => t.section === id).map(tile).join("")}</div>`).join("");
+    `<div class="sidebar-section" aria-label="${label}">${TOOLS.filter((t) => t.section === id).map(tile).join("")}</div>`).join("");
   const rotate = `
     <div class="quick" role="group" aria-label="Rotate photo">
       <span class="quick-label">Rotate Photo</span>
