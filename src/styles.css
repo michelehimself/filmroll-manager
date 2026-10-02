@@ -368,7 +368,8 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 .thumb.failed::after { content: "?"; font-size: 14px; }
 
 /* ── Drop zone & loading ────────────────────────── */
-.drop-area { flex: 1; display: flex; flex-direction: column; padding: 28px 36px; min-width: 0; overflow-y: auto; }
+.drop-area { flex: 1; display: flex; flex-direction: column; padding: 24px 36px 28px;   /* the title sits at the same height as on Films, Gear and Settings (.page-head) */
+  min-width: 0; overflow-y: auto; }
 .step-heading { font-size: 20px; font-weight: 600; margin-bottom: 5px; }
 .step-sub     { font-size: 13px; color: var(--text-2); line-height: 1.5; }
 .dropzone {
