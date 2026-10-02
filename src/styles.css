@@ -151,6 +151,9 @@ button { font-family: inherit; }
 .tab.nav-settings:hover, .tab.nav-settings.active { color: var(--text); }
 
 /* ── Settings page ──────────────────────────────── */
+.settings-grid { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 30%; gap: 40px; align-items: stretch; }
+.settings-main { min-width: 0; max-width: 620px; }
+@media (max-width: 1000px) { .settings-grid { grid-template-columns: 1fr; } }
 .settings-block { margin-bottom: 28px; }
 .settings-block:last-child { margin-bottom: 8px; }
 .settings-title { font-size: 11px; font-weight: 600; color: var(--text-3); margin-bottom: 8px; }
@@ -406,6 +409,8 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 .link-btn { background: none; border: none; color: var(--text-2); text-decoration: underline; font-size: 12px; cursor: pointer; padding: 0; white-space: nowrap; }
 .link-btn:hover { text-decoration: underline; }
 .btn { padding: 6px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 500; cursor: pointer; border: none; transition: background .14s; }
+.btn.with-icon { display: inline-flex; align-items: center; gap: 8px; }   /* icon and label on one line, centred */
+.btn.with-icon svg { flex-shrink: 0; }
 .btn:disabled { opacity: .38; cursor: not-allowed; }
 .btn-ghost   { background: transparent; color: var(--text-2); border: 1px solid var(--border); }
 .btn-ghost:not(:disabled):hover { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }

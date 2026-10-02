@@ -807,8 +807,8 @@ function viewSettings() {
           <p class="step-sub">Changes apply right away.</p>
         </div>
       </div>
-      <div class="page-scroll fill"><div class="gear-grid">
-       <section class="gear-col">
+      <div class="page-scroll fill"><div class="settings-grid">
+       <div class="settings-main">
         <section class="settings-block">
           <p class="settings-title">Appearance</p>
           <p class="settings-label">Theme</p>
@@ -827,7 +827,7 @@ function viewSettings() {
         </section>
         <section class="settings-block">
           <p class="settings-title">Keyboard</p>
-          <button class="btn btn-ghost" data-action="show-shortcuts">${IC.keyboard}<span style="margin-left:8px">Show shortcuts</span></button>
+          <button class="btn btn-ghost with-icon" data-action="show-shortcuts">${IC.keyboard}<span>Show shortcuts</span></button>
         </section>
         <section class="settings-block">
           <p class="settings-title">About</p>
@@ -836,7 +836,7 @@ function viewSettings() {
           <div class="about-row"><span>Privacy</span><span>Your pictures never leave this computer. Nothing is uploaded or tracked.</span></div>
           <div class="about-row"><span>Legal</span><span class="legal-links"><span class="legal-link" aria-disabled="true" title="Coming soon">Legal Notice</span><span class="legal-link" aria-disabled="true" title="Coming soon">Privacy Policy</span></span></div>
         </section>
-       </section>
+       </div>
        ${viewAboutMe()}
       </div></div>
     </div>`;
