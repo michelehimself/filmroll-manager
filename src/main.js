@@ -25,6 +25,7 @@ const IC = {
   rotateCcw:  svg(16, 1.6, `<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/> <path d="M3 3v5h5"/>`),
   close:      svg(14, 1.8, `<path d="M18 6 6 18"/> <path d="m6 6 12 12"/>`),
   closeSmall: svg(10, 2, `<path d="M18 6 6 18"/> <path d="m6 6 12 12"/>`),
+  maximize:   svg(16, 1.6, `<path d="M8 3H5a2 2 0 0 0-2 2v3"/> <path d="M21 8V5a2 2 0 0 0-2-2h-3"/> <path d="M3 16v3a2 2 0 0 0 2 2h3"/> <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>`),
   keyboard:   svg(15, 1.6, `<path d="M10 8h.01"/> <path d="M12 12h.01"/> <path d="M14 8h.01"/> <path d="M16 12h.01"/> <path d="M18 8h.01"/> <path d="M6 8h.01"/> <path d="M7 16h10"/> <path d="M8 12h.01"/> <rect width="20" height="16" x="2" y="4" rx="2"/>`),
   chevronL:   svg(22, 1.8, `<path d="m15 18-6-6 6-6"/>`),
   chevronR:   svg(22, 1.8, `<path d="m9 18 6-6-6-6"/>`),
@@ -1153,19 +1154,19 @@ function bodyShortcuts() {
   const keys = (list) => list.map((k) => `<span class="keycap">${esc(k)}</span>`).join("");
   const groups = [
     ["File list", [
-      [["Space"], "Enlarge the selected picture"],
-      [[MOD, "R"], "Rotate the selected pictures clockwise"],
-      [[MOD, "L"], "Rotate the selected pictures counterclockwise"],
+      [["Space"], "Enlarge the selected picture", IC.maximize],
+      [[MOD, "R"], "Rotate the selected pictures clockwise", IC.rotateCw],
+      [[MOD, "L"], "Rotate the selected pictures counterclockwise", IC.rotateCcw],
     ]],
     ["Large preview", [
-      [["R"], "Rotate the picture clockwise"],
-      [["L"], "Rotate the picture counterclockwise"],
+      [["R"], "Rotate the picture clockwise", IC.rotateCw],
+      [["L"], "Rotate the picture counterclockwise", IC.rotateCcw],
     ]],
   ];
   return groups.map(([title, rows]) => `
     <div class="shortcut-group">
       <div class="shortcut-title">${title}</div>
-      ${rows.map(([k, text]) => `<div class="shortcut-row"><span class="shortcut-keys">${keys(k)}</span><span class="shortcut-text">${esc(text)}</span></div>`).join("")}
+      ${rows.map(([k, text, icon]) => `<div class="shortcut-row"><span class="shortcut-keys">${keys(k)}</span><span class="shortcut-text"><span class="shortcut-icon">${icon}</span><span>${esc(text)}</span></span></div>`).join("")}
     </div>`).join("");
 }
 

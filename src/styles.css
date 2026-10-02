@@ -223,7 +223,8 @@ button { font-family: inherit; }
 .shortcut-title { font-size: 11px; font-weight: 600; color: var(--text-3); margin-bottom: 6px; }
 .shortcut-row { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
 .shortcut-keys { display: flex; align-items: center; gap: 5px; }
-.shortcut-text { color: var(--text-2); line-height: 1.4; }
+.shortcut-text { display: flex; align-items: center; gap: 10px; color: var(--text-2); line-height: 1.4; }
+.shortcut-icon { display: flex; flex-shrink: 0; color: var(--accent); }
 .keycap {
   flex-shrink: 0; padding: 2px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
   font: 600 11px/1.3 var(--font-ui); color: var(--text-2);
