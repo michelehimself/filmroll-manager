@@ -1168,7 +1168,8 @@ function renderFilmList() {
     });
     html += `</div></div>`;
   });
-  html += `<p class="film-note">Missing a film? Add your own with “Add Film”. You can also type any name in the Film field.</p>`;
+  html += `<p class="film-note">Missing a film? Add your own with “Add Film”. You can also type any name in the Film field.</p>
+    <p class="film-legal">All manufacturer names and logos are the property of their respective owners and are registered trademarks. They are shown only to identify the films and do not imply any affiliation with, or endorsement by, these companies.</p>`;
   box.innerHTML = html;
 }
 
