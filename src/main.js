@@ -962,7 +962,7 @@ function viewRecents() {
   }).join("");
   return `
     <div class="recents">
-      <div class="recents-head"><span>Recent folders</span><button class="link-btn" data-action="clear-recents">Clear list</button></div>
+      <div class="recents-head"><span>Recent folders</span><button class="link-btn" data-action="clear-recents">${IC.trash}<span>Clear list</span></button></div>
       ${rows}
     </div>`;
 }
