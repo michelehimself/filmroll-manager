@@ -47,17 +47,3 @@ jobs:
           prerelease: false
           uploadUpdaterJson: true
           args: --target aarch64-apple-darwin
-
-      # TRANSITION (remove once nobody uses 0.6.0 or older any more):
-      # apps up to 0.6.0 still look for updates in the old releases repository. Give that repository the
-      # small update file (it points to the downloads in this repository), so those apps find this version.
-      - name: Hand the update info to the old releases repository
-        env:
-          NEW_REPO_TOKEN: ${{ github.token }}
-          OLD_REPO_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          GH_TOKEN="$NEW_REPO_TOKEN" gh release download "$TAG" -R "${{ github.repository }}" -p latest.json
-          GH_TOKEN="$OLD_REPO_TOKEN" gh release create "$TAG" latest.json -R michelehimself/filmroll-manager-releases \
-            --title "FilmRoll Manager $TAG" \
-            --notes "The app moved. Downloads: https://github.com/${{ github.repository }}/releases/tag/$TAG"
