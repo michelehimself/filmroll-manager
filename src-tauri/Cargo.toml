@@ -1,6 +1,6 @@
 [package]
 name = "filmroll-manager"
-version = "0.6.0"
+version = "0.7.0"
 description = "Prepare film scans for your photo library"
 authors = ["@MicheleHimself"]
 edition = "2021"
