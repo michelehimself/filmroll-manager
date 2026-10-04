@@ -163,7 +163,7 @@ const TABS = [
 
 // `ready: false` tools are shown but cannot be used yet
 const TOOLS = [
-  { id: "reverse", section: "actions", title: "Reverse Order",     desc: "Flip the frame order",      icon: IC.reverse, ready: true },
+  { id: "reverse", section: "actions", title: "Reverse Roll Order", desc: "Flip the frame order",      icon: IC.reverse, ready: true },
   { id: "meta",    section: "actions", title: "Bulk Edit Meta Data", desc: "Camera, lens, film, date", icon: IC.meta,    ready: true },
   { id: "rename",  section: "actions", title: "Bulk Rename",       desc: "Build new file names",      icon: IC.rename,  ready: true },
   { id: "sheet",   section: "tools",   title: "Create Contact Sheet", desc: "Printable A4 overview (PDF)", icon: IC.sheet, ready: true },
@@ -1490,7 +1490,7 @@ function renderModal() {
   const m = {
     shortcuts: { title: "Keyboard Shortcuts", sub: "Shortcuts for the Manager.", body: bodyShortcuts, ok: null },
     film:    { title: S.filmForm.editing ? "Edit Film" : "Add Film", sub: "Your own film. It shows up in the list and as a suggestion in the Film field.", body: bodyFilm, ok: S.filmForm.editing ? "Save" : "Add Film", wait: "" },
-    reverse: { title: "Reverse Order", sub: "Every file swaps its name with the file on the opposite end of the roll. Frame 1 becomes the last frame, and so on.", body: bodyReverse, ok: "Confirm", wait: "Reversing frame order…" },
+    reverse: { title: "Reverse Roll Order", sub: "Every file swaps its name with the file on the opposite end of the roll. Frame 1 becomes the last frame, and so on.", body: bodyReverse, ok: "Confirm", wait: "Reversing frame order…" },
     meta:    { title: "Bulk Edit Meta Data", sub: "This information is embedded into all image files in the folder. Every field is optional.", body: bodyMeta, ok: "Embed Metadata", wait: "Embedding metadata…" },
     sheet:   { title: "Create Contact Sheet", sub: "All frames on one A4 page, ready to print and file away. It is saved as a PDF on your computer.", body: bodySheet, ok: "Save as PDF…", wait: "Creating the contact sheet…" },
     rename:  { title: "Bulk Rename", sub: "Click a tag to insert it at the cursor. You can type text between tags, too.", body: bodyRename, ok: "Rename Files", wait: "Renaming files…" },
