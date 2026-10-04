@@ -25,6 +25,9 @@
   --accent-hover:  #0066D6;
   --accent-soft:   #E8F1FF;
   --accent-ring:   rgba(0,122,255,.14);
+  --on-accent:     #FFFFFF;   /* text and ticks on the accent colour */
+  --check-img:     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5.5'/%3E%3C/svg%3E");
+  --dash-img:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 6h6'/%3E%3C/svg%3E");
   --success:       #30D158;
   --success-hover: #25A244;
   --danger-bg:     #FDECEC;
@@ -61,10 +64,13 @@
     --text-2:        #AEAEB2;
     --text-3:        #8A8A8E;
     --placeholder:   #6C6C70;
-    --accent:        #0A84FF;
-    --accent-hover:  #3395FF;
-    --accent-soft:   rgba(10,132,255,.16);
-    --accent-ring:   rgba(10,132,255,.28);
+    --accent:        #FFC800;   /* brand yellow in dark mode */
+    --accent-hover:  #FFD633;
+    --accent-soft:   rgba(255,200,0,.14);
+    --accent-ring:   rgba(255,200,0,.30);
+    --on-accent:     #1C1C1E;
+    --check-img:     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%231C1C1E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5.5'/%3E%3C/svg%3E");
+    --dash-img:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%231C1C1E' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 6h6'/%3E%3C/svg%3E");
     --danger-bg:     rgba(255,69,58,.14);
     --danger-text:   #FF8A80;
 
@@ -86,10 +92,13 @@
   --text-2:        #AEAEB2;
   --text-3:        #8A8A8E;
   --placeholder:   #6C6C70;
-  --accent:        #0A84FF;
-  --accent-hover:  #3395FF;
-  --accent-soft:   rgba(10,132,255,.16);
-  --accent-ring:   rgba(10,132,255,.28);
+  --accent:        #FFC800;   /* brand yellow in dark mode */
+  --accent-hover:  #FFD633;
+  --accent-soft:   rgba(255,200,0,.14);
+  --accent-ring:   rgba(255,200,0,.30);
+  --on-accent:     #1C1C1E;
+  --check-img:     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%231C1C1E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5.5'/%3E%3C/svg%3E");
+  --dash-img:      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%231C1C1E' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 6h6'/%3E%3C/svg%3E");
   --danger-bg:     rgba(255,69,58,.14);
   --danger-text:   #FF8A80;
 
@@ -279,8 +288,8 @@ input[type="checkbox"] {
   display: inline-grid; place-content: center; cursor: pointer;
 }
 input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate { background-color: var(--accent); border-color: var(--accent); }
-input[type="checkbox"]:checked { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5.5'/%3E%3C/svg%3E"); }
-input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M3 6h6'/%3E%3C/svg%3E"); }
+input[type="checkbox"]:checked { background-image: var(--check-img); }
+input[type="checkbox"]:indeterminate { background-image: var(--dash-img); }
 
 /* ── File list ──────────────────────────────────── */
 .filelist { flex: 1; min-height: 0; overflow: auto; }
@@ -717,7 +726,7 @@ button.tag:hover { opacity: .75; }
 .prev-new { font-weight: 500; }
 .preview-more, .preview-empty { font-size: 12px; color: var(--text-3); margin-top: 4px; }
 
-.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
 .btn-primary:not(:disabled):hover { background: var(--accent-hover); }
 .btn-success { background: var(--success); color: #fff; }
 .btn-success:not(:disabled):hover { background: var(--success-hover); }
