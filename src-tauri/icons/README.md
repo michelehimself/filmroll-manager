@@ -1,4 +1,4 @@
-App icon: the illustration is `app-icon-source.png` (1254 x 1254, full square). To make all sizes, put it into an SVG that cuts the macOS shape (824 px rounded square with radius 185 on a 1024 px transparent canvas, as in Apple's icon grid), then let Tauri render it:
+App icon: the illustration is `app-icon-source.png` (920 x 920, full square). To make all sizes, put it into an SVG that cuts the macOS shape (824 px rounded square with radius 185 on a 1024 px transparent canvas, as in Apple's icon grid), then let Tauri render it:
 
     npx tauri icon icon.svg -o /tmp/icons
 

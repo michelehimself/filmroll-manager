@@ -76,9 +76,9 @@ const THEMES = [["system", "System", IC.monitor], ["light", "Light", IC.sun], ["
 function applyTheme(theme) {
   const root = document.documentElement;
   if (theme === "light" || theme === "dark") root.dataset.theme = theme; else delete root.dataset.theme;
-  try { localStorage.setItem("theme", THEMES.some((t) => t[0] === theme) ? theme : "system"); } catch {}
+  try { localStorage.setItem("theme", THEMES.some((t) => t[0] === theme) ? theme : "dark"); } catch {}
 }
-try { applyTheme(localStorage.getItem("theme") || "system"); } catch { applyTheme("system"); }
+try { applyTheme(localStorage.getItem("theme") || "dark"); } catch { applyTheme("dark"); }   // Dark is the default look
 const FILE_MANAGER_LABEL = navigator.userAgent.includes("Mac") ? "Open in Finder"
   : navigator.userAgent.includes("Windows") ? "Open in Explorer" : "Open Folder";
 
@@ -798,7 +798,7 @@ function render() {
 }
 
 function viewSettings() {
-  const theme = THEMES.some((t) => t[0] === S.store.theme) ? S.store.theme : "system";
+  const theme = THEMES.some((t) => t[0] === S.store.theme) ? S.store.theme : "dark";
   const version = document.querySelector(".titlebar-version")?.textContent ?? "";
   return `
     <div class="settings-page">
@@ -1087,7 +1087,7 @@ async function loadStore() {
     const films = (v) => (Array.isArray(v) ? v.filter((f) => f && typeof f.name === "string").map((f) => ({
       brand: String(f.brand || ""), name: f.name, iso: String(f.iso || ""), type: FILM_TYPES.includes(f.type) ? f.type : FILM_TYPES[0],
     })) : []);
-    S.store = { ...data, autoUpdate: data.autoUpdate === true, theme: THEMES.some((t) => t[0] === data.theme) ? data.theme : "system", favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses), customFilms: films(data.customFilms), recentFolders: recents(data.recentFolders) };
+    S.store = { ...data, autoUpdate: data.autoUpdate === true, theme: THEMES.some((t) => t[0] === data.theme) ? data.theme : "dark", favorites: list(data.favorites), cameras: list(data.cameras), lenses: list(data.lenses), customFilms: films(data.customFilms), recentFolders: recents(data.recentFolders) };
     applyTheme(S.store.theme);
   } catch (e) {
     S.storeError = `Your saved favorites could not be loaded: ${e}`;
