@@ -1,11 +1,13 @@
-# Builds the Mac app when a version tag like v0.5.0 is pushed, signs the update files and puts
-# everything on the public releases page (michelehimself/filmroll-manager-releases).
-# The code itself stays in this private repository.
+# Builds the Mac app when a version tag like v0.7.0 is pushed, signs the update files and
+# publishes everything as a release of THIS repository.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+
+permissions:
+  contents: write
 
 jobs:
   mac:
@@ -29,15 +31,11 @@ jobs:
 
       - uses: tauri-apps/tauri-action@v0
         env:
-          # needs write access to the releases repository (see CLAUDE.md, "Releasing")
-          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
-          owner: michelehimself
-          repo: filmroll-manager-releases
           tagName: ${{ github.ref_name }}
-          releaseCommitish: main   # the tag is created in the releases repo, not in this one
           releaseName: "FilmRoll Manager ${{ github.ref_name }}"
           releaseBody: |
             **Mac with Apple Silicon (M1 or newer):** download the `.dmg`, drag the app into Applications.
@@ -49,3 +47,17 @@ jobs:
           prerelease: false
           uploadUpdaterJson: true
           args: --target aarch64-apple-darwin
+
+      # TRANSITION (remove once nobody uses 0.6.0 or older any more):
+      # apps up to 0.6.0 still look for updates in the old releases repository. Give that repository the
+      # small update file (it points to the downloads in this repository), so those apps find this version.
+      - name: Hand the update info to the old releases repository
+        env:
+          NEW_REPO_TOKEN: ${{ github.token }}
+          OLD_REPO_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          GH_TOKEN="$NEW_REPO_TOKEN" gh release download "$TAG" -R "${{ github.repository }}" -p latest.json
+          GH_TOKEN="$OLD_REPO_TOKEN" gh release create "$TAG" latest.json -R michelehimself/filmroll-manager-releases \
+            --title "FilmRoll Manager $TAG" \
+            --notes "The app moved. Downloads: https://github.com/${{ github.repository }}/releases/tag/$TAG"

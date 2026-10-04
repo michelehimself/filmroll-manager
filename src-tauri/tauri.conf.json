@@ -41,7 +41,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMyM0IxNUVGNDRGREExQkYKUldTL29mMUU3eFU3d2xHVnMvT2t4aGhmRHl3K0U4M000OTF6RTFDVzNiUjl5S05OSU5LalZwWksK",
       "endpoints": [
-        "https://github.com/michelehimself/filmroll-manager-releases/releases/latest/download/latest.json"
+        "https://github.com/michelehimself/filmroll-manager/releases/latest/download/latest.json"
       ]
     }
   }

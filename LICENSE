@@ -1,0 +1,31 @@
+FilmRoll Manager
+Copyright (c) 2026 @MicheleHimself. All rights reserved.
+
+The source code in this repository is public so that anyone can see how the app
+works and what it does with their files. Being able to read the code does not give
+you permission to use it.
+
+You may:
+  - download the official release builds of FilmRoll Manager and use them free of
+    charge for your own, personal purposes.
+  - read the source code.
+
+You may not, without written permission from the copyright holder:
+  - copy, modify, merge, publish, distribute, sublicense or sell the source code
+    or any build made from it,
+  - create derivative works or publish your own builds,
+  - use the code or the name "FilmRoll Manager" commercially.
+
+Third-party material keeps its own licences:
+  - IBM Plex Sans and JetBrains Mono (SIL Open Font License 1.1, see src/fonts/)
+  - Lucide icons (ISC licence, see src/icons/LICENSE-Lucide.txt)
+  - the Rust crates and npm packages listed in Cargo.lock / package-lock.json
+  - Manufacturer names and logos (src/logos/) are registered trademarks of their
+    respective owners. They are shown only to identify film stocks, are not part of
+    this licence and are used without any affiliation or endorsement.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR ITS USE. Always work on a copy of your scans, never on the originals.
