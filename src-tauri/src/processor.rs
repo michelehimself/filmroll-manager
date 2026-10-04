@@ -200,6 +200,13 @@ pub struct MetadataInput {
     pub(crate) film: String,
     pub(crate) date: String, // YYYY-MM-DD
     pub(crate) time: String, // HH:MM
+    /// Seconds between two frames (each file is this much later than the one before); 3 if not given
+    #[serde(rename = "offsetSeconds", default = "default_offset_seconds")]
+    pub(crate) offset_seconds: i64,
+}
+
+fn default_offset_seconds() -> i64 {
+    SECONDS_BETWEEN_FRAMES
 }
 
 /// Step 3 – writes date/time (+3 s per frame), camera, lens and film.
@@ -231,9 +238,12 @@ pub(crate) fn write_metadata_in(
         )
         .map_err(|_| "Please enter a valid date and time.".to_string())?;
 
+        if !(1..=3600).contains(&meta.offset_seconds) {
+            return Err("The offset between frames must be between 1 and 3600 seconds.".to_string());
+        }
         let total = files.len().max(1) as f64;
         for (i, file) in files.iter().enumerate() {
-            let timestamp = (start + TimeDelta::seconds(i as i64 * SECONDS_BETWEEN_FRAMES))
+            let timestamp = (start + TimeDelta::seconds(i as i64 * meta.offset_seconds))
                 .format("%Y:%m:%d %H:%M:%S")
                 .to_string();
             write_file_metadata(file, &timestamp, meta)
@@ -835,8 +845,7 @@ mod tests {
         let dir = roll("meta", 3);
         let meta = MetadataInput {
             camera: "Canon AE-1".into(), lens: "50mm f/1.4".into(), film: "Kodak Gold 200".into(),
-            date: "2026-05-01".into(), time: "21:00".into(),
-        };
+            date: "2026-05-01".into(), time: "21:00".into(), offset_seconds: 3 };
         assert_eq!(write_metadata_in(&dir, None, &meta, &|_| {}).unwrap(), 3);
 
         let third = dir.join("scan_3.jpg");
@@ -862,8 +871,7 @@ mod tests {
         let dir = roll("required", 1);
         let meta = MetadataInput {
             camera: "Nikon FM3A".into(), lens: "Nikkor 50mm f/1.4".into(), film: "Portra 400".into(),
-            date: "2026-05-01".into(), time: "21:00".into(),
-        };
+            date: "2026-05-01".into(), time: "21:00".into(), offset_seconds: 3 };
         write_metadata_in(&dir, None, &meta, &|_| {}).unwrap();
         let exif = Metadata::new_from_path(&dir.join("scan_1.jpg")).unwrap();
         assert!(exif.get_tag(&ExifTag::ExifVersion(vec![])).next().is_some());
@@ -953,8 +961,7 @@ mod tests {
         let dir = roll("meta_sel", 4);
         let meta = MetadataInput {
             camera: "Canon AE-1".into(), lens: "".into(), film: "".into(),
-            date: "2026-05-01".into(), time: "21:00".into(),
-        };
+            date: "2026-05-01".into(), time: "21:00".into(), offset_seconds: 3 };
         let only = strings(&["scan_2.jpg", "scan_4.jpg"]);
         assert_eq!(write_metadata_in(&dir, Some(&only), &meta, &|_| {}).unwrap(), 2);
 
@@ -1020,8 +1027,7 @@ mod tests {
         let dir = roll("rotate", 3);
         let meta = MetadataInput {
             camera: "Canon AE-1".into(), lens: "50mm f/1.4".into(), film: "Kodak Gold 200".into(),
-            date: "2026-05-01".into(), time: "21:00".into(),
-        };
+            date: "2026-05-01".into(), time: "21:00".into(), offset_seconds: 3 };
         write_metadata_in(&dir, None, &meta, &|_| {}).unwrap();
         let before = fs::read(dir.join("scan_2.jpg")).unwrap();
 
@@ -1169,5 +1175,28 @@ mod tests {
         assert_eq!(xmp_value(r#"<rdf:Description xmp:Rating="2"/>"#, "xmp:Rating").as_deref(), Some("2"));
         assert_eq!(xmp_value("<xmp:Rating>5</xmp:Rating>", "xmp:Rating").as_deref(), Some("5"));
         assert_eq!(xmp_value("<x/>", "xmp:Rating"), None);
+    }
+
+    #[test]
+    fn the_offset_between_frames_can_be_chosen() {
+        let dir = roll("offset", 3);
+        let mut meta = MetadataInput {
+            camera: String::new(), lens: String::new(), film: String::new(),
+            date: "2026-05-01".into(), time: "21:00".into(), offset_seconds: 10,
+        };
+        assert_eq!(write_metadata_in(&dir, None, &meta, &|_| {}).unwrap(), 3);
+        let third = Metadata::new_from_path(&dir.join("scan_3.jpg")).unwrap();
+        let date = third.get_tag(&ExifTag::DateTimeOriginal(String::new())).next().unwrap();
+        assert_eq!(date, &ExifTag::DateTimeOriginal("2026:05:01 21:00:20".into()));
+        // out-of-range values are refused before any file is touched
+        for bad in [0, -5, 3601] {
+            meta.offset_seconds = bad;
+            assert!(write_metadata_in(&dir, None, &meta, &|_| {}).unwrap_err().contains("between 1 and 3600"));
+        }
+        // an older request without the offset still means 3 seconds
+        let parsed: MetadataInput = serde_json::from_str(r#"{"camera":"","lens":"","film":"","date":"2026-05-01","time":"21:00"}"#).unwrap();
+        assert_eq!(parsed.offset_seconds, 3);
+        let parsed: MetadataInput = serde_json::from_str(r#"{"camera":"","lens":"","film":"","date":"2026-05-01","time":"21:00","offsetSeconds":7}"#).unwrap();
+        assert_eq!(parsed.offset_seconds, 7);
     }
 }

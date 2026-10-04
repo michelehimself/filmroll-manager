@@ -269,8 +269,7 @@ mod tests {
         let dir = tiny_jpeg_folder("roundtrip", 2);
         let meta = MetadataInput {
             camera: "Canon AE-1".into(), lens: "50mm f/1.4".into(), film: "Kodak Gold 200 & Co".into(),
-            date: "2026-05-01".into(), time: "21:00".into(),
-        };
+            date: "2026-05-01".into(), time: "21:00".into(), offset_seconds: 3 };
         write_metadata_in(&dir, None, &meta, &|_| {}).unwrap();
         let second = read_info(&dir.join("scan_2.jpg"));
         assert_eq!(second.camera, "Canon AE-1");

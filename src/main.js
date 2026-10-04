@@ -57,6 +57,7 @@ const IC = {
   starSmall:  svg(13, 1.6, `<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>`),
   star:       svg(16, 1.6, `<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>`),
   calendar:   svg(15, 1.6, `<path d="M8 2v3"/> <path d="M16 2v3"/> <rect x="3" y="3" width="18" height="18" rx="2"/> <path d="M3 9h18"/>`),
+  timer:      svg(15, 1.6, `<line x1="10" x2="14" y1="2" y2="2"/> <line x1="12" x2="15" y1="14" y2="11"/> <circle cx="12" cy="14" r="8"/>`),
   clock:      svg(15, 1.6, `<circle cx="12" cy="12" r="10"/> <path d="M12 6v6l4 2"/>`),
   aperture:   svg(15, 1.6, `<circle cx="12" cy="12" r="10"/> <path d="m14.31 8 5.74 9.94"/> <path d="M9.69 8h11.48"/> <path d="m7.38 12 5.74-9.94"/> <path d="M9.69 16 3.95 6.06"/> <path d="M14.31 16H2.83"/> <path d="m16.62 12-5.74 9.94"/>`),
   image:      svg(18, 1.5, `<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/> <circle cx="9" cy="9" r="2"/> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>`),
@@ -195,7 +196,7 @@ let S = {
   error: null,
   modal: null,    // null | "reverse" | "meta" | "rename"
   busy: false,    // a tool is writing to the files
-  meta: { camera: "", lens: "", film: "", date: todayString(), time: "12:00" },
+  meta: { camera: "", lens: "", film: "", date: todayString(), time: "12:00", offset: "3" },   // offset = seconds between two frames
   rename: { date: "", film: "" },
   sheet: { title: "", subtitle: "", scannedAt: "", orientation: "auto", columns: "auto", showNames: false, punched: false },   // values behind the Date and Film Name tags
   template: [],                      // [{ kind, value? }]
@@ -1533,28 +1534,28 @@ function bodyReverse() {
 
 // Bulk Edit Meta Data
 function bodyMeta() {
-  const field = (id, label, icon, type, placeholder) => `
+  const field = (id, label, icon, type, placeholder, extra = "") => `
     <div class="field-wrap">
       <label class="field-label" for="f-${id}">${label}</label>
       <div class="field-row">
         <span class="field-icon">${icon}</span>
-        <input id="f-${id}" data-model="meta.${id}" ${["film", "camera", "lens"].includes(id) ? `data-suggest="${id}"` : ""} type="${type}" placeholder="${placeholder}" value="${esc(S.meta[id])}" autocomplete="off" spellcheck="false">
+        <input id="f-${id}" data-model="meta.${id}" ${["film", "camera", "lens"].includes(id) ? `data-suggest="${id}"` : ""} type="${type}" placeholder="${placeholder}" value="${esc(S.meta[id])}" autocomplete="off" spellcheck="false" ${extra}>
       </div>
     </div>`;
   return `
-    <div class="scope">${scopeText()}</div>
+    <div class="scope">${IC.folder}<span>${scopeText()}</span></div>
     <div class="fields">
-      ${field("camera", "Camera", IC.camera, "text", "e.g. Canon AE-1, Contax T2")}
-      ${field("lens", "Lens", IC.aperture, "text", "e.g. 50mm f/1.4, 35mm f/2.8")}
+      <div class="field-line">
+        ${field("camera", "Camera", IC.camera, "text", "e.g. Canon AE-1")}
+        ${field("lens", "Lens", IC.aperture, "text", "e.g. 50mm f/1.4")}
+      </div>
       ${field("film", "Film", IC.film, "text", "e.g. Kodak Gold 200, Ilford HP5")}
-      <div>
+      <div class="field-line">
         ${field("date", "Shoot Date", IC.calendar, "date", "")}
-        <div class="hint-box"><strong>Why does this matter?</strong> Apps like Apple Photos or Google Photos sort images by the date embedded in the file. Without a date, your scans appear at a random spot in your library timeline.</div>
-      </div>
-      <div>
         ${field("time", "Start Time", IC.clock, "time", "")}
-        <div class="hint-box">Each file is automatically offset by <strong>3 seconds</strong> from the previous one, so the exact frame order is preserved in your photo library.</div>
+        <div class="field-narrow">${field("offset", "Offset (seconds)", IC.timer, "number", "3", 'min="1" max="3600" step="1" inputmode="numeric"')}</div>
       </div>
+      <div class="hint-box"><strong>Why does this matter?</strong> Apps like Apple Photos or Google Photos sort pictures by the date inside the file. Each file is set later than the one before by the offset (3 seconds is a good default), so your frame order is kept.</div>
     </div>`;
 }
 
@@ -1799,7 +1800,7 @@ async function confirmModal() {
   }
   const jobs = {
     reverse: [() => invoke("reverse_order", { folder: S.folder, files }), "Frame order reversed."],
-    meta:    [() => invoke("write_metadata", { folder: S.folder, meta: { ...S.meta }, files }), `Metadata written to ${count} file${count === 1 ? "" : "s"}.`],
+    meta:    [() => invoke("write_metadata", { folder: S.folder, meta: { camera: S.meta.camera, lens: S.meta.lens, film: S.meta.film, date: S.meta.date, time: S.meta.time, offsetSeconds: Math.round(Number(S.meta.offset)) }, files }), `Metadata written to ${count} file${count === 1 ? "" : "s"}.`],
     sheet:   [() => invoke("save_contact_sheet", { folder: S.folder, files, options: sheetOptions(), target: sheetTarget }), "Contact sheet saved."],
     rename:  [() => invoke("rename_files", { folder: S.folder, parts: S.template, date: S.rename.date, film: S.rename.film, files }), `${count} file${count === 1 ? "" : "s"} renamed.`],
   };
