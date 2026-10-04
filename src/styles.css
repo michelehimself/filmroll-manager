@@ -485,7 +485,7 @@ input[type="checkbox"]:indeterminate { background-image: url("data:image/svg+xml
 
 /* Gear page */
 .gear-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: stretch; }
-.page-scroll.fill { display: flex; flex-direction: column; }
+.page-scroll.fill { display: flex; flex-direction: column; padding-top: 10px; }   /* + 14 px under the title = 24 px, like between the title and the drop zone on Select Folder */
 .gear-grid { flex: 1; }
 /* The cards use the full height, with the usual space left at the bottom */
 .gear-col {
