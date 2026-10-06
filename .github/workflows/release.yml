@@ -79,3 +79,24 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
           if-no-files-found: error
           retention-days: 7
+
+  # After a real release (version tag) and only when BOTH builds are done: tell the website repo to
+  # refresh its version number and download link right away, instead of waiting for its timer.
+  # Needs the secret WEBSITE_DISPATCH_TOKEN (fine-grained token, only repo filmrollmanager-website,
+  # permission "Contents: Read and write"). Without it the release is NOT affected, you only get a warning.
+  notify-website:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tell the website to update
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::Secret WEBSITE_DISPATCH_TOKEN is missing - the website will update on its own timer instead."
+            exit 0
+          fi
+          gh api repos/michelehimself/filmrollmanager-website/dispatches \
+            -f event_type=app-release \
+            -f "client_payload[version]=${GITHUB_REF_NAME}"
