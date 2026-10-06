@@ -1077,7 +1077,7 @@ dependencies = [
 
 [[package]]
 name = "filmroll-manager"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "image",

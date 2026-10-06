@@ -58,7 +58,8 @@ jobs:
             The first time, right-click the app and choose "Open" (the app is not signed with an Apple developer account).
             If macOS still refuses: `xattr -dr com.apple.quarantine "/Applications/FilmRoll Manager.app"` in Terminal.
 
-            ## Windows (64 bit)
+            ## Windows (64 bit) – beta
+            New in this version and still being tested. If something does not work, please let me know.
             Download the `-setup.exe` and run it. Windows may show "Windows protected your PC" because the app is not signed with a paid certificate.
             Click **More info**, then **Run anyway**.
 
