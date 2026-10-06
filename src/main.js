@@ -944,7 +944,8 @@ function timeAgo(ms) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-const shortPath = (path) => path.replace(/^\/Users\/[^/]+/, "~");   // /Users/anna/Scans → ~/Scans
+// The home folder is shown as "~":  /Users/anna/Scans → ~/Scans,  C:\Users\anna\Scans → ~\Scans
+const shortPath = (path) => path.replace(/^(?:\/Users\/|\/home\/|[A-Za-z]:\\Users\\)[^/\\]+/, "~");
 
 function viewRecents() {
   const list = S.store.recentFolders;
@@ -1795,7 +1796,7 @@ async function confirmModal() {
   let sheetTarget = null;
   if (tool === "sheet") {
     const base = (S.sheet.title.trim() || folderName(S.folder)).replace(/[\/\\:*?"<>|]/g, "-");
-    sheetTarget = await save({ title: "Save contact sheet", defaultPath: `${S.folder}/${base} contact sheet.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] });
+    sheetTarget = await save({ title: "Save contact sheet", defaultPath: `${S.folder}${S.folder.includes("\\") ? "\\" : "/"}${base} contact sheet.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] });
     if (!sheetTarget) return;
   }
   const jobs = {

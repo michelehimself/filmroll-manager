@@ -1,17 +1,31 @@
-# Builds the Mac app when a version tag like v0.7.0 is pushed, signs the update files and
-# publishes everything as a release of THIS repository.
+# Builds the app for Mac (Apple Silicon) and Windows, signs the update files and
+# - on a version tag like v0.8.0: publishes everything as a release of THIS repository,
+# - on a manual run ("Run workflow" on GitHub): only builds and keeps the installers as downloadable
+#   artifacts of the run, so a Windows build can be tested without releasing anything.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  mac:
-    runs-on: macos-latest   # Apple Silicon
+  build:
+    strategy:
+      fail-fast: false
+      max-parallel: 1   # one after the other: both jobs write into the same latest.json
+      matrix:
+        include:
+          - os: macos-latest        # Apple Silicon
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: --target x86_64-pc-windows-msvc --bundles nsis
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -21,7 +35,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.target }}
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -35,15 +49,22 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
-          tagName: ${{ github.ref_name }}
+          # without a tag (manual run) nothing is published
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: "FilmRoll Manager ${{ github.ref_name }}"
           releaseBody: |
-            **Mac with Apple Silicon (M1 or newer):** download the `.dmg`, drag the app into Applications.
+            ## Mac (Apple Silicon, M1 or newer)
+            Download the `.dmg` and drag the app into Applications.
             The first time, right-click the app and choose "Open" (the app is not signed with an Apple developer account).
             If macOS still refuses: `xattr -dr com.apple.quarantine "/Applications/FilmRoll Manager.app"` in Terminal.
+
+            ## Windows (64 bit)
+            Download the `-setup.exe` and run it. Windows may show "Windows protected your PC" because the app is not signed with a paid certificate.
+            Click **More info**, then **Run anyway**.
 
             Already installed? Open Settings in the app and choose "Check now" to update.
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true
-          args: --target aarch64-apple-darwin
+          uploadWorkflowArtifacts: ${{ github.event_name == 'workflow_dispatch' }}
+          args: ${{ matrix.args }}
