@@ -66,5 +66,15 @@ jobs:
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true
-          uploadWorkflowArtifacts: ${{ github.event_name == 'workflow_dispatch' }}
           args: ${{ matrix.args }}
+
+      # Manual test run: keep the installers as downloadable files of this run (7 days)
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: installer-${{ matrix.os }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+          if-no-files-found: error
+          retention-days: 7
