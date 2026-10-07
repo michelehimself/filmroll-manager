@@ -17,7 +17,7 @@ no pictures, file names or personal data.
   editable camera, lens, film and date, and a star rating (1–5).
 - **Rotate** pictures (only the EXIF orientation changes, never the image data).
 - **Reverse Roll Order** if the lab scanned the roll backwards.
-- **Bulk Edit Meta Data**: date and time (+3 s per frame, so the order survives in Apple
+- **Bulk Edit Metadata**: date and time (+3 s per frame, so the order survives in Apple
   Photos and Google Photos), camera, lens, film (the ISO is read from the film name).
 - **Bulk Rename** with a template, for example `2026-09-27_IMG-01_Kodak-Gold-200.jpg`.
 - **Contact sheet** as a one-page A4 PDF, optionally with room for a hole punch.
