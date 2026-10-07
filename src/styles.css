@@ -193,7 +193,6 @@ button { font-family: inherit; }
 .settings-check { margin-top: 2px; }
 .tab.nav-settings { position: relative; }
 .tab.nav-settings.has-update::after { content: ""; position: absolute; top: 6px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-.soon-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .soon-badge { font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
 .me-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
 .me-avatar {
@@ -217,7 +216,6 @@ button.me-link:hover { border-color: var(--accent-line); background: var(--accen
 .me-sub   { font-size: 12px; color: var(--text-2); margin-top: 1px; }
 .me-go    { display: flex; color: var(--text-3); }
 .legal-links { display: flex; gap: 18px; }
-.legal-link { color: var(--text-3); cursor: default; }   /* not active yet: the pages do not exist */
 .about-row { display: flex; gap: 12px; font-size: 13px; color: var(--text-2); padding: 7px 0; border-bottom: 1px solid var(--border-soft); }
 .about-row > span:first-child { width: 90px; flex-shrink: 0; color: var(--text-3); }   /* only the label column, not the spans inside the value */
 

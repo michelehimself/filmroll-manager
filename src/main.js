@@ -834,9 +834,9 @@ function viewSettings() {
         <section class="settings-block">
           <p class="settings-title">About</p>
           <div class="about-row"><span>Version</span><span>${esc(version.replace(/^v/, ""))}${IS_DEV ? " (development)" : ""}</span></div>
-          <div class="about-row"><span>Website</span><span class="soon-line"><span class="legal-link">filmrollmanager.com</span><span class="soon-badge">Coming soon</span></span></div>
+          <div class="about-row"><span>Website</span><span>${siteLink(SITE_URL, "filmrollmanager.com")}</span></div>
           <div class="about-row"><span>Privacy</span><span>Your pictures never leave this computer. Nothing is uploaded or tracked.</span></div>
-          <div class="about-row"><span>Legal</span><span class="legal-links"><span class="legal-link" aria-disabled="true" title="Coming soon">Legal Notice</span><span class="legal-link" aria-disabled="true" title="Coming soon">Privacy Policy</span></span></div>
+          <div class="about-row"><span>Legal</span><span class="legal-links">${siteLink(SITE_URL + "impressum.html", "Legal Notice")}${siteLink(SITE_URL + "datenschutz.html", "Privacy Policy")}</span></div>
         </section>
        </div>
       </div>
@@ -844,6 +844,11 @@ function viewSettings() {
      ${viewAboutMe()}
     </div>`;
 }
+
+// Pages of the project website that the Settings page links to (opened in the web browser, only on click)
+const SITE_URL = "https://filmrollmanager.com/";
+const SITE_LINKS = [SITE_URL, SITE_URL + "impressum.html", SITE_URL + "datenschutz.html"];
+const siteLink = (url, label) => `<button class="link-btn" data-open-url="${url}" title="Opens in your web browser">${label}${IC.arrowUpRight}</button>`;
 
 // "About me" card on the Settings page. The Instagram links open in the web browser, but only when clicked.
 const ABOUT_ME = {
@@ -874,9 +879,9 @@ function viewAboutMe() {
     </section></aside>`;
 }
 
-// Only the links listed in ABOUT_ME can be opened
+// Only the links listed in SITE_LINKS and ABOUT_ME can be opened
 function openExternal(url) {
-  if (!ABOUT_ME.links.some((l) => l.url === url)) return;
+  if (!SITE_LINKS.includes(url) && !ABOUT_ME.links.some((l) => l.url === url)) return;
   window.__TAURI__.opener?.openUrl(url).catch(() => {});
 }
 

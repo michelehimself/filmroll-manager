@@ -16,6 +16,9 @@
       "allow": [
         {
           "url": "https://www.instagram.com/*"
+        },
+        {
+          "url": "https://filmrollmanager.com/*"
         }
       ]
     }
